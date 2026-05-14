@@ -1,0 +1,20 @@
+{
+  "name": "gemini-web-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "bridge": "node src/bridge-server.mjs",
+    "mcp": "node src/mcp-server.mjs",
+    "ask": "node src/send-task.mjs ask",
+    "code": "node src/send-task.mjs code",
+    "image": "node src/send-task.mjs image",
+    "video": "node src/send-task.mjs video",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.20.0",
+    "ws": "^8.18.0",
+    "zod": "^4.0.0"
+  }
+}

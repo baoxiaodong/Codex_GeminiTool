@@ -1,0 +1,5 @@
+[mcp_servers.gemini-web-bridge]
+command = "node"
+args = ['C:\path\to\Codex_GeminiTool\src\mcp-server.mjs']
+cwd = 'C:\path\to\Codex_GeminiTool'
+startup_timeout_sec = 20
