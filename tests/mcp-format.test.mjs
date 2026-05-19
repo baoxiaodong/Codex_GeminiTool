@@ -135,6 +135,30 @@ test('formats queued single task payloads with polling instruction', () => {
   assert.equal(formatted.structured.task.id, 'task-000010');
 });
 
+test('formats saved image files with markdown previews for Codex rendering', () => {
+  const formatted = formatToolPayload({
+    text: '',
+    codeBlocks: [],
+    files: [{ kind: 'image', path: 'C:\\temp\\gemini\\task-1.png', mimeType: 'image/png' }],
+    media: [],
+    raw: null,
+  });
+
+  assert.match(formatted.text, /!\[Gemini image\]\(C:\/temp\/gemini\/task-1\.png\)/);
+});
+
+test('formats saved video files with markdown previews for Codex rendering', () => {
+  const formatted = formatToolPayload({
+    text: '',
+    codeBlocks: [],
+    files: [{ kind: 'video', path: 'C:\\temp\\gemini\\task-2.mp4', mimeType: 'video/mp4' }],
+    media: [],
+    raw: null,
+  });
+
+  assert.match(formatted.text, /!\[Gemini video\]\(C:\/temp\/gemini\/task-2\.mp4\)/);
+});
+
 test('converts image data URLs to MCP image content', () => {
   const content = dataUrlToImageContent('data:image/png;base64,aGVsbG8=');
 

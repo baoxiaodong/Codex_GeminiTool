@@ -1,32 +1,44 @@
 ﻿# Codex Gemini Tool
 
-璁?Codex 鐩存帴璋冪敤浣犲凡缁忕櫥褰曠殑 Gemini 缃戦〉鐗堬紝鏀寔闂瓟銆佸啓浠ｇ爜銆佺敓鍥俱€佺敓鎴愯棰戙€?
-杩欎釜椤圭洰鐢变笁閮ㄥ垎缁勬垚锛?
-- 鏈湴妗ユ帴鏈嶅姟锛歚127.0.0.1:8765`
-- Chrome 鎻掍欢锛氳礋璐ｆ搷浣?`https://gemini.google.com/app`
-- MCP 鏈嶅姟锛氳 Codex 閫氳繃鑷劧璇█鎴?MCP 宸ュ叿璋冪敤 Gemini
+让 Codex 直接调用你已经登录的 Gemini 网页版，支持文本问答、代码生成、图片生成和视频生成。
 
-瑁呭ソ浠ュ悗锛屼綘鍙互鍦?Codex 閲岀洿鎺ヨ繖鏍疯锛?
+项目由三部分组成：
+
+- 本地桥接服务：默认监听 `http://127.0.0.1:8765`
+- Chrome 扩展：负责操作 `https://gemini.google.com/app`
+- MCP 服务：让 Codex 通过 MCP 工具或自然语言调用 Gemini
+
+安装完成后，你可以在 Codex 中直接说：
+
 ```text
-鐢╣emini闂綘濂斤紝绠€鍗曞洖澶嶄竴鍙ヨ瘽
-鐢╣emini鍐欎唬鐮佸啓涓€涓?React 鐧诲綍缁勪欢
-鐢╣emini鐢熷浘涓€寮犳湭鏉ュ煄甯傚鏅捣鎶?鐢╣emini鐢熸垚瑙嗛鏈潵鍩庡競鏃ュ嚭鐭棰?```
+用gemini问：你好，简单回复一句话
+用gemini写代码：写一个 React 登录组件
+用gemini生图：一张未来城市夜景海报
+用gemini生成视频：未来城市日出短视频
+```
 
-## 鍔熻兘
+同时也兼容常见误拼：`用gimini...`。
 
-- 璁?Codex 璋?Gemini 缃戦〉鍥炵瓟鏂囨湰闂
-- 璁?Codex 璋?Gemini 缃戦〉鍐欎唬鐮?- 璁?Codex 璋?Gemini 缃戦〉鐢熷浘
-- 璁?Codex 璋?Gemini 缃戦〉鐢熸垚瑙嗛
-- 鎻愪緵鐭埆鍚?MCP 宸ュ叿锛歚gemini_ask`銆乣gemini_code`銆乣gemini_image`銆乣gemini_video`
-- 鏀寔鑷劧瑙﹀彂璇嶏細`鐢╣emini闂?..`銆乣鐢╣emini鍐欎唬鐮?..`銆乣鐢╣emini鐢熷浘...`
+## 功能特性
 
-## 杩愯瑕佹眰
+- 让 Codex 调用 Gemini 网页版回答文本问题
+- 让 Codex 调用 Gemini 网页版生成代码
+- 让 Codex 调用 Gemini 网页版生成图片
+- 让 Codex 调用 Gemini 网页版生成视频
+- 支持短工具名：`gemini_status`、`gemini_ask`、`gemini_code`、`gemini_image`、`gemini_video`
+- 支持异步任务查询：`gemini_get_task`、`gemini_list_tasks`
+- 默认等待 Gemini 最终结果并回传给 Codex，方便 Codex 快速显示内容
+- 按类型保存输出文件：代码到 `code/`、图片到 `images/`、视频到 `videos/`
+
+## 运行要求
 
 - Windows
 - Google Chrome
-- Node.js 20 鎴栨洿楂樼増鏈?- 宸茬櫥褰?Gemini 缃戦〉鐗堣处鍙?- 宸插畨瑁呭苟鍚敤 MCP 鐨?Codex
+- Node.js 20 或更高版本
+- 已登录 Gemini 网页版账号
+- 已安装并启用 MCP 的 Codex
 
-## 椤圭洰缁撴瀯
+## 项目结构
 
 ```text
 .codex/
@@ -45,9 +57,11 @@ src/
   bridge-server.mjs
   http-utils.mjs
   mcp-format.mjs
+  mcp-options.mjs
   mcp-server.mjs
   output-paths.mjs
   protocol.mjs
+  result-files.mjs
   send-task.mjs
   task-store.mjs
 tests/
@@ -55,46 +69,59 @@ README.md
 package.json
 ```
 
-## 瀹夎姝ラ
+## 安装步骤
 
-### 1. 鍏嬮殕浠撳簱
+### 1. 克隆仓库
 
 ```powershell
 git clone https://github.com/baoxiaodong/Codex_GeminiTool.git
 cd Codex_GeminiTool
 ```
 
-### 2. 瀹夎渚濊禆
+### 2. 安装依赖
 
 ```powershell
 npm install
 ```
 
-### 3. 鍔犺浇 Chrome 鎻掍欢
+### 3. 加载 Chrome 扩展
 
-1. 鎵撳紑 `chrome://extensions`
-2. 寮€鍚彸涓婅 `Developer mode`
-3. 鐐瑰嚮 `Load unpacked`
-4. 閫夋嫨鏈」鐩殑 `extension` 鐩綍
-5. 鎵撳紑 [https://gemini.google.com/app](https://gemini.google.com/app)
-6. 纭繚 Gemini 椤甸潰宸茬櫥褰?
-### 4. 鍚姩鏈湴妗ユ帴鏈嶅姟
+1. 打开 `chrome://extensions`
+2. 开启右上角 `Developer mode`
+3. 点击 `Load unpacked`
+4. 选择本项目的 `extension` 目录
+5. 打开 <https://gemini.google.com/app>
+6. 确保 Gemini 页面已经登录
+
+### 4. 启动本地桥接服务
 
 ```powershell
 npm run bridge
 ```
 
-鐪嬪埌绫讳技杈撳嚭灏辫〃绀哄惎鍔ㄦ垚鍔燂細
+看到类似输出即启动成功：
 
 ```text
 Gemini bridge server listening on http://127.0.0.1:8765
 Output root: C:\Users\<you>\Desktop\codex\gemini
 ```
 
-### 5. 閰嶇疆 Codex MCP
+如果提示端口被占用：
 
-鎶?[docs/codex-config.example.toml](/C:/Users/Administrator/Documents/Codex/2026-05-14/files-mentioned-by-the-user-2b4c3e27e6b41e814b72bef38081967d/docs/codex-config.example.toml) 閲岀殑鍐呭澶嶅埗鍒颁綘鐨?`C:\Users\<浣犺嚜宸?\.codex\config.toml`锛屾妸璺緞鏀规垚浣犳湰鏈洪」鐩疄闄呰矾寰勩€?
-绀轰緥锛?
+```text
+EADDRINUSE: address already in use 127.0.0.1:8765
+```
+
+说明桥接服务已经在运行，不需要重复启动。可以用下面命令检查：
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8765/health
+```
+
+### 5. 配置 Codex MCP
+
+把 `docs/codex-config.example.toml` 中的内容复制到你的 Codex 配置文件，例如：
+
 ```toml
 [mcp_servers.gemini-web-bridge]
 command = "node"
@@ -103,67 +130,48 @@ cwd = 'C:\path\to\Codex_GeminiTool'
 startup_timeout_sec = 20
 ```
 
-閰嶅畬鍚庨噸鍚?Codex锛屾垨鑰呮柊寮€涓€涓?Codex 浼氳瘽銆?
-### 6. 閰嶇疆 Codex 鑷劧璇█瑙﹀彂璇?
-鎶婁粨搴撻噷鐨?[SKILL.md](/C:/Users/Administrator/Documents/Codex/2026-05-14/files-mentioned-by-the-user-2b4c3e27e6b41e814b72bef38081967d/.codex/skills/gemini-web-bridge/SKILL.md) 澶嶅埗鍒帮細
+请把路径改成你的本机项目实际路径。
+
+配置完成后，重启 Codex 或新开一个 Codex 会话。
+
+### 6. 配置 Codex 自然语言触发词
+
+把仓库里的：
 
 ```text
-C:\Users\<浣犺嚜宸?\.codex\skills\gemini-web-bridge\SKILL.md
+.codex/skills/gemini-web-bridge/SKILL.md
 ```
 
-濡傛灉鐩綍涓嶅瓨鍦ㄥ氨鍏堝垱寤恒€傚鍒跺畬鎴愬悗锛岄噸鏂版墦寮€ Codex銆?
-杩欎竴姝ョ殑浣滅敤鏄 Codex 鏇村鏄撴妸涓嬮潰杩欑被璇濊嚜鍔ㄨ矾鐢卞埌 Gemini锛?
-```text
-鐢╣emini闂?..
-鐢╣emini鍐欎唬鐮?..
-鐢╣emini鐢熷浘...
-鐢╣emini鐢熸垚瑙嗛...
-```
-
-## 缁堢蹇€熸祴璇?
-淇濇寔 Gemini 椤甸潰鎵撳紑锛屼繚鎸?`npm run bridge` 鍦ㄨ繍琛岋紝鐒跺悗鍦ㄦ柊鐨?PowerShell 绐楀彛娴嬭瘯銆?
-鏂囨湰闂瓟锛?
-```powershell
-npm run ask -- "浣犲ソ锛岀畝鍗曞洖澶嶄竴鍙ヨ瘽"
-```
-
-浠ｇ爜锛?
-```powershell
-npm run code -- "鍐欎竴涓?JavaScript 闃叉姈鍑芥暟"
-```
-
-鐢熷浘锛?
-```powershell
-npm run image -- "鐢熸垚涓€寮犳湭鏉ュ煄甯傚鏅捣鎶ワ紝鐢靛奖鎰燂紝楂樿川閲?
-```
-
-瑙嗛锛?
-```powershell
-npm run video -- "鐢熸垚涓€涓湭鏉ュ煄甯傛棩鍑虹殑闀滃ご锛岀數褰辨劅锛岀煭瑙嗛"
-```
-
-## 鍦?Codex 閲岀殑浣跨敤鏂瑰紡
-
-MCP 鐢熸晥鍚庯紝浣犲彲浠ョ洿鎺ヨ锛?
-```text
-鐢╣emini闂綘濂斤紝绠€鍗曞洖澶嶄竴鍙ヨ瘽
-鐢╣emini鍐欎唬鐮佸啓涓€涓?React 鐧诲綍缁勪欢
-鐢╣emini鐢熷浘涓€寮犲彲涔愬浼犳捣鎶ワ紝鍟嗕笟骞垮憡椋庢牸锛岀珫鐗堟捣鎶?鐢╣emini鐢熸垚瑙嗛鏈潵鍩庡競鏃ュ嚭鐭棰?```
-
-甯﹀啋鍙峰拰涓嶅甫鍐掑彿閮藉彲浠ワ細
+复制到：
 
 ```text
-鐢╣emini闂細浣犲ソ锛岀畝鍗曞洖澶嶄竴鍙ヨ瘽
-鐢╣emini鐢熷浘锛氫竴寮犳湭鏉ュ煄甯傚鏅捣鎶?```
+C:\Users\<你的用户名>\.codex\skills\gemini-web-bridge\SKILL.md
+```
 
-濡傛灉浣犳兂鎵嬪姩璧板伐鍏峰悕锛屼篃鍙互浣跨敤锛?
+复制完成后，重启 Codex 或新开会话。
+
+## 在 Codex 中使用
+
+MCP 生效后，你可以直接说：
+
+```text
+用gemini问：你好，简单回复一句话
+用gemini写代码：写一个 LangChain + RAG 智能客服案例
+用gemini生图：一张真实自然的卧室镜自拍照片，比例 3:4
+用gemini生成视频：未来城市日出短视频
+```
+
+也支持这些工具名：
+
 - `gemini_status`
 - `gemini_ask`
 - `gemini_code`
 - `gemini_image`
 - `gemini_video`
+- `gemini_get_task`
+- `gemini_list_tasks`
 
-鍏煎鏃у悕瀛楋細
+兼容旧工具名：
 
 - `gemini_web_status`
 - `gemini_web_ask`
@@ -171,14 +179,48 @@ MCP 鐢熸晥鍚庯紝浣犲彲浠ョ洿鎺ヨ锛?
 - `gemini_web_generate_image`
 - `gemini_web_generate_video`
 
-## 鍋ュ悍妫€鏌?
-妫€鏌ユˉ鎺ユ湇鍔＄姸鎬侊細
+## 终端快速测试
+
+保持 Gemini 页面打开，并保持 `npm run bridge` 运行。
+
+文本问答：
+
+```powershell
+npm run ask -- "你好，简单回复一句话"
+```
+
+代码生成：
+
+```powershell
+npm run code -- "写一个 JavaScript 防抖函数"
+```
+
+图片生成：
+
+```powershell
+npm run image -- "生成一张未来城市夜景海报，电影感，高质量"
+```
+
+视频生成：
+
+```powershell
+npm run video -- "生成一个未来城市日出的短视频，电影感"
+```
+
+如果想让 CLI 等待最终结果，可以设置：
+
+```powershell
+$env:GEMINI_BRIDGE_CLI_WAIT="true"
+```
+
+## 健康检查
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8765/health
 ```
 
-鍏抽敭瀛楁锛?
+关键字段：
+
 ```text
 ok: true
 bridge: gemini-web-bridge
@@ -186,98 +228,164 @@ polling: true
 geminiPagePollingActive: true
 ```
 
-娉ㄦ剰锛歚extensionClients` 涓?`0` 涔熶笉涓€瀹氭湁闂銆傚綋鍓嶄富娴佺▼宸茬粡鍒囧埌 Gemini 椤甸潰涓诲姩杞锛屼笉鍐嶄緷璧栨棫鐨?WebSocket 甯搁┗杩炴帴銆?
-## 杈撳嚭琛屼负
+说明：`extensionClients` 为 `0` 不一定有问题。当前主流程使用 Gemini 页面主动轮询，不依赖旧的 WebSocket 常驻连接。
 
-- 鏂囨湰浠诲姟浼氳繑鍥炲彲璇绘枃鏈紝涓嶆槸鍘熷 JSON
-- 浠ｇ爜浠诲姟浼氳繑鍥炴鏂囧拰鎻愬彇鍑虹殑浠ｇ爜鍧?- 鍥剧墖浠诲姟浼氭妸 Gemini 椤甸潰閲岀殑鍥剧墖杞垚 `dataUrl` 鍥炰紶缁?MCP锛孋odex 鐣岄潰鍙洿鎺ユ帴鏀跺浘鐗囷紱鍚屾椂妗ユ帴鏈嶅姟浼氭妸鍥剧墖淇濆瓨鎴愭湰鍦版枃浠惰矾寰?- 瑙嗛浠诲姟浼氳繑鍥炴彁鍙栧埌鐨勮棰戝湴鍧€锛涘鏋滈〉闈㈡彁渚涘彲涓嬭浇鍦板潃锛孋hrome 鎻掍欢涔熶細灏濊瘯涓嬭浇
-- MCP 里的问答/代码/图片/视频工具默认使用快速异步提交，避免 Codex 工具调用层卡住；先快速拿到 `task-xxxxxx`，再用 `gemini_get_task` 查询最终结果。
-- 榛樿杈撳嚭鐩綍鏄?`Desktop\codex\gemini`
+如果 `geminiPagePollingActive` 是 `false`，通常说明：
 
-## 鍙€夌幆澧冨彉閲?
+- Gemini 页面没有打开
+- Chrome 扩展没有加载成功
+- Gemini 标签页没有刷新到最新 content script
+
+可以尝试在 `chrome://extensions` 重新加载扩展，然后刷新 Gemini 页面。
+
+## 输出行为
+
+默认输出根目录：
+
+```text
+C:\Users\<you>\Desktop\codex\gemini
+```
+
+输出文件按任务类型分开保存：
+
+```text
+Desktop\codex\gemini\
+  code\
+    task-000001.md
+    task-000001-code-0.py
+  images\
+    task-000002-0.jpg
+  videos\
+    task-000003-0.mp4
+```
+
+具体行为：
+
+- 文本任务返回可读文本，不是原始 JSON
+- 代码任务返回正文和提取出的代码块，并保存到 `code/`
+- 图片任务会把 Gemini 页面里的图片转换成 `dataUrl` 回传给 MCP，同时保存到 `images/`
+- 视频任务会返回提取到的视频地址；如果页面能暴露可读取媒体数据，则保存到 `videos/`
+- MCP 工具默认等待最终结果，便于 Codex 直接显示文本、代码、图片或视频预览
+- 如需长任务后台提交，可以显式传 `wait=false`，然后用 `gemini_get_task` 查询结果
+- 如需恢复旧的默认异步行为，可给 MCP 服务设置环境变量：`GEMINI_BRIDGE_MCP_DIRECT_WAIT=false`
+
+## 可选环境变量
+
 ```powershell
 $env:GEMINI_BRIDGE_PORT="8765"
 $env:GEMINI_BRIDGE_OUTPUT_ROOT="C:\Users\<you>\Desktop\codex\gemini"
 $env:GEMINI_BRIDGE_TOKEN="choose-a-local-token"
+$env:GEMINI_BRIDGE_MCP_DIRECT_WAIT="false"
 ```
 
-濡傛灉璁剧疆浜?`GEMINI_BRIDGE_TOKEN`锛孒TTP 璋冪敤鏂归渶瑕佸甫涓?`x-gemini-bridge-token`銆?
-## 鏁呴殰鎺掓煡
+如果设置了 `GEMINI_BRIDGE_TOKEN`，HTTP 调用方需要带上 `x-gemini-bridge-token` 请求头。
 
-### 1. Gemini 椤甸潰鏄庢槑寮€鐫€锛屼絾 Codex 璇存病杩炴帴
+## 故障排查
 
-鍏堢湅鍋ュ悍妫€鏌ワ細
+### 1. 缺少依赖 `ws`
+
+如果看到：
+
+```text
+Cannot find package 'ws'
+```
+
+说明还没有安装依赖。运行：
+
+```powershell
+npm install
+```
+
+### 2. 端口被占用
+
+如果看到：
+
+```text
+EADDRINUSE: address already in use 127.0.0.1:8765
+```
+
+说明桥接服务已经在运行，或有旧进程占用端口。可以查看：
+
+```powershell
+Get-NetTCPConnection -LocalAddress 127.0.0.1 -LocalPort 8765 -State Listen
+```
+
+### 3. Gemini 页面打开但 Codex 说没连接
+
+先检查：
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8765/health
 ```
 
-閲嶇偣鐪嬶細
+重点看：
 
 ```text
 geminiPagePollingActive: true
 ```
 
-濡傛灉鏄?`false`锛岄€氬父璇存槑锛?
-- Gemini 椤甸潰娌℃墦寮€
-- 鎻掍欢娌″姞杞芥垚鍔?- Gemini 鏍囩椤垫病鏈夊埛鏂板埌鏈€鏂拌剼鏈?
-### 2. 鎻愮ず璇嶅～杩涘幓浜嗭紝浣嗘病鏈夊彂閫?
-鍏堥噸鏂板姞杞芥彃浠讹紝鍐嶇‖鍒锋柊 Gemini 椤甸潰锛?
+如果是 `false`，重新加载 Chrome 扩展并刷新 Gemini 页面。
+
+### 4. 提示词填进去了但没有发送
+
+先重新加载扩展，再硬刷新 Gemini 页面：
+
 ```text
 chrome://extensions
 Ctrl+Shift+R
 ```
 
-褰撳墠鑴氭湰宸茬粡浼樺厛閫傞厤 Gemini 鐨?Quill 杈撳叆妗嗭紝鐩爣杈撳叆鍖轰細浼樺厛鍖归厤锛?
+当前脚本优先适配 Gemini 的 Quill 输入框：
+
 ```text
-DIV role="textbox" aria-label="涓?Gemini 杈撳叆鎻愮ず"
+DIV role="textbox" aria-label="为 Gemini 输入提示"
 ```
 
-### 3. 涓枃鎻愮ず璇嶅彉鎴愰棶鍙?
-PowerShell 5.1 涓嬩笉瑕佽嚜宸辨墜鍐欏師濮?JSON 鍘昏皟 `Invoke-RestMethod -Body`銆?
-浼樺厛鐢ㄩ」鐩唴鍛戒护锛?
+### 5. 中文提示词变成问号
+
+PowerShell 5.1 下不要手写原始 JSON 调 `Invoke-RestMethod -Body`。优先用项目内命令：
+
 ```powershell
-npm run ask -- "涓枃鎻愮ず璇?
+npm run ask -- "中文提示词"
 ```
 
-### 4. 鎯崇‘璁ゆ彃浠惰剼鏈槸涓嶆槸鏈€鏂扮増鏈?
-鎵撳紑 Gemini 椤甸潰鐨?DevTools锛屾墽琛岋細
+### 6. 插件脚本版本不一致
+
+在 Gemini 页面 DevTools 中执行：
 
 ```js
 document.documentElement.getAttribute('data-gemini-web-bridge-version')
 ```
 
-褰撳墠鐗堟湰搴旇绫讳技锛?
+当前版本应类似：
+
 ```text
 2026-05-18-v19
 ```
 
-如果 `/health` 里显示 `expectedGeminiScriptVersion: 2026-05-18-v19`，但 `lastIgnoredGeminiScriptVersion`
-仍是旧版本（例如 `2026-05-18-v17`），并且 `geminiPagePollingActive: false`，说明 Chrome 里还有旧
-content-script 在轮询。请先在 `chrome://extensions` 点击本插件的重新加载按钮，再刷新 Gemini 页面。
-旧脚本会被桥接服务拒绝，不会再抢走新任务。
+如果 `/health` 里显示 `expectedGeminiScriptVersion` 是新版本，但页面仍是旧版本，请在 `chrome://extensions` 重新加载本插件，再刷新 Gemini 页面。
 
-### 5. Codex 閲岃涓嶄簡鈥滅敤gemini...鈥?
-纭涓や欢浜嬶細
+## 开发与测试
 
-1. `config.toml` 閲屽凡缁忛厤缃簡 `gemini-web-bridge` MCP
-2. `C:\Users\<浣犺嚜宸?\.codex\skills\gemini-web-bridge\SKILL.md` 宸茬粡澶嶅埗瀹屾垚
+运行测试：
 
-鏀瑰畬鍚庝竴瀹氳閲嶅惎 Codex 鎴栨柊寮€浼氳瘽銆?
-## 寮€鍙戜笌娴嬭瘯
-
-杩愯娴嬭瘯锛?
 ```powershell
 npm test
 ```
 
-鏈」鐩綋鍓嶆妧鏈爤锛?
-- Chrome Manifest V3 鎻掍欢
-- 鏈湴 HTTP Bridge
+当前技术栈：
+
+- Chrome Manifest V3 扩展
+- Node.js 原生 HTTP Bridge
 - MCP Stdio Server
 - `@modelcontextprotocol/sdk`
-- Node 鍘熺敓 `node --test`
+- `ws`
+- `zod`
+- Node 原生 `node --test`
 
-## 璇存槑
+## 说明
 
-- 杩欐槸瀵规甯哥櫥褰?Gemini 缃戦〉浼氳瘽鐨勮嚜鍔ㄥ寲璋冪敤锛屽彧鑳戒娇鐢ㄤ綘璐﹀彿鏈潵灏辫兘鎵嬪姩浣跨敤鐨勮兘鍔涖€?- 濡傛灉 Gemini 缃戦〉缁撴瀯鍙樺寲锛屽彲鑳介渶瑕佹洿鏂?[content-script.js](/C:/Users/Administrator/Documents/Codex/2026-05-14/files-mentioned-by-the-user-2b4c3e27e6b41e814b72bef38081967d/extension/content-script.js) 閲岀殑閫夋嫨鍣ㄣ€?- 浠ｇ爜缁撴灉浼氳繑鍥炵粰 Codex 瀹￠槄锛屼笉浼氳嚜鍔ㄥ啓杩涗綘鐨勯」鐩枃浠躲€?- 鍥剧墖鍜岃棰戣兘鍚﹁嚜鍔ㄨ惤鐩橈紝鍙栧喅浜?Gemini 椤甸潰褰撳墠鑳藉惁鏆撮湶鍙笅杞界殑濯掍綋鍦板潃銆?
+- 这是对正常登录 Gemini 网页会话的自动化调用，只能使用你账号本来就能手动使用的能力。
+- 如果 Gemini 网页结构变化，可能需要更新 `extension/content-script.js` 中的选择器。
+- 代码结果会返回给 Codex 审阅并保存到本地，不会自动写入你的业务项目文件。
+- 图片和视频能否完整落盘，取决于 Gemini 页面当前是否暴露可读取的媒体地址或数据。

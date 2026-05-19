@@ -2,10 +2,12 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import * as z from 'zod/v4';
 import { dataUrlToImageContent, formatToolPayload } from './mcp-format.mjs';
+import { withWaitOptions } from './mcp-options.mjs';
 
 const BRIDGE_URL = process.env.GEMINI_BRIDGE_URL ?? 'http://127.0.0.1:8765';
 const TOKEN = process.env.GEMINI_BRIDGE_TOKEN ?? '';
 const DEFAULT_ACK_WAIT_MS = Number(process.env.GEMINI_BRIDGE_MCP_ACK_WAIT_MS ?? 5000);
+const DEFAULT_DIRECT_WAIT = process.env.GEMINI_BRIDGE_MCP_DIRECT_WAIT !== 'false';
 
 const server = new McpServer({
   name: 'gemini-web-bridge',
@@ -41,7 +43,7 @@ server.registerTool(
       waitMs: z.number().int().positive().max(1800000).optional(),
     }),
   },
-  async ({ prompt, context = '', wait = false, waitMs }) => textResult(await submitTask('/ask', withWaitOptions({ prompt, context }, wait, waitMs, 120000))),
+  async ({ prompt, context = '', wait, waitMs }) => textResult(await submitTask('/ask', directWaitOptions({ prompt, context }, wait, waitMs, 120000))),
 );
 
 server.registerTool(
@@ -55,7 +57,7 @@ server.registerTool(
       waitMs: z.number().int().positive().max(1800000).optional(),
     }),
   },
-  async ({ prompt, context = '', wait = false, waitMs }) => textResult(await submitTask('/ask', withWaitOptions({ prompt, context }, wait, waitMs, 120000))),
+  async ({ prompt, context = '', wait, waitMs }) => textResult(await submitTask('/ask', directWaitOptions({ prompt, context }, wait, waitMs, 120000))),
 );
 
 server.registerTool(
@@ -69,7 +71,7 @@ server.registerTool(
       waitMs: z.number().int().positive().max(1800000).optional(),
     }),
   },
-  async ({ prompt, context = '', wait = false, waitMs }) => textResult(await submitTask('/code', withWaitOptions({ prompt, context }, wait, waitMs, 120000))),
+  async ({ prompt, context = '', wait, waitMs }) => textResult(await submitTask('/code', directWaitOptions({ prompt, context }, wait, waitMs, 120000))),
 );
 
 server.registerTool(
@@ -83,13 +85,13 @@ server.registerTool(
       waitMs: z.number().int().positive().max(1800000).optional(),
     }),
   },
-  async ({ prompt, context = '', wait = false, waitMs }) => textResult(await submitTask('/code', withWaitOptions({ prompt, context }, wait, waitMs, 120000))),
+  async ({ prompt, context = '', wait, waitMs }) => textResult(await submitTask('/code', directWaitOptions({ prompt, context }, wait, waitMs, 120000))),
 );
 
 server.registerTool(
   'gemini_web_generate_image',
   {
-    description: 'Ask Gemini web to generate an image and return extracted media URLs or saved output files. Defaults to async submit to avoid Codex tool timeouts; pass wait=true only for short tests.',
+    description: 'Ask Gemini web to generate an image and return extracted media URLs or saved output files. Defaults to waiting for the final result so Codex can display the image; pass wait=false for async submit.',
     inputSchema: z.object({
       prompt: z.string().min(1),
       outputDir: z.string().optional(),
@@ -97,13 +99,13 @@ server.registerTool(
       waitMs: z.number().int().positive().max(1800000).optional(),
     }),
   },
-  async ({ prompt, outputDir = '', wait = false, waitMs }) => textResult(await submitTask('/image', withWaitOptions({ prompt, outputDir }, wait, waitMs, 600000))),
+  async ({ prompt, outputDir = '', wait, waitMs }) => textResult(await submitTask('/image', directWaitOptions({ prompt, outputDir }, wait, waitMs, 600000))),
 );
 
 server.registerTool(
   'gemini_image',
   {
-    description: 'Short alias. Ask Gemini web to generate an image. Defaults to async submit to avoid Codex tool timeouts; use gemini_get_task to fetch the result.',
+    description: 'Short alias. Ask Gemini web to generate an image and wait for the final result so Codex can display it. Pass wait=false to submit asynchronously and use gemini_get_task later.',
     inputSchema: z.object({
       prompt: z.string().min(1),
       outputDir: z.string().optional(),
@@ -111,13 +113,13 @@ server.registerTool(
       waitMs: z.number().int().positive().max(1800000).optional(),
     }),
   },
-  async ({ prompt, outputDir = '', wait = false, waitMs }) => textResult(await submitTask('/image', withWaitOptions({ prompt, outputDir }, wait, waitMs, 600000))),
+  async ({ prompt, outputDir = '', wait, waitMs }) => textResult(await submitTask('/image', directWaitOptions({ prompt, outputDir }, wait, waitMs, 600000))),
 );
 
 server.registerTool(
   'gemini_web_generate_video',
   {
-    description: 'Ask Gemini web to generate a video if the logged-in account has video generation available. Defaults to async submit to avoid Codex tool timeouts; pass wait=true only for short tests.',
+    description: 'Ask Gemini web to generate a video if the logged-in account has video generation available. Defaults to waiting for the final result so Codex can display a saved video path/preview; pass wait=false for async submit.',
     inputSchema: z.object({
       prompt: z.string().min(1),
       outputDir: z.string().optional(),
@@ -125,13 +127,13 @@ server.registerTool(
       waitMs: z.number().int().positive().max(1800000).optional(),
     }),
   },
-  async ({ prompt, outputDir = '', wait = false, waitMs }) => textResult(await submitTask('/video', withWaitOptions({ prompt, outputDir }, wait, waitMs, 1800000))),
+  async ({ prompt, outputDir = '', wait, waitMs }) => textResult(await submitTask('/video', directWaitOptions({ prompt, outputDir }, wait, waitMs, 1800000))),
 );
 
 server.registerTool(
   'gemini_video',
   {
-    description: 'Short alias. Ask Gemini web to generate a video if the logged-in account supports it. Defaults to async submit to avoid Codex tool timeouts; use gemini_get_task to fetch the result.',
+    description: 'Short alias. Ask Gemini web to generate a video if the logged-in account supports it and wait for the final result. Pass wait=false to submit asynchronously and use gemini_get_task later.',
     inputSchema: z.object({
       prompt: z.string().min(1),
       outputDir: z.string().optional(),
@@ -139,7 +141,7 @@ server.registerTool(
       waitMs: z.number().int().positive().max(1800000).optional(),
     }),
   },
-  async ({ prompt, outputDir = '', wait = false, waitMs }) => textResult(await submitTask('/video', withWaitOptions({ prompt, outputDir }, wait, waitMs, 1800000))),
+  async ({ prompt, outputDir = '', wait, waitMs }) => textResult(await submitTask('/video', directWaitOptions({ prompt, outputDir }, wait, waitMs, 1800000))),
 );
 
 server.registerTool(
@@ -172,20 +174,14 @@ async function submitTask(path, body) {
   });
 }
 
-function withWaitOptions(body, wait, waitMs, terminalDefaultMs) {
-  if (wait) {
-    return {
-      ...body,
-      wait: true,
-      waitMs: waitMs ?? terminalDefaultMs,
-    };
-  }
-
-  return {
-    ...body,
-    wait: false,
-    waitAckMs: waitMs ?? DEFAULT_ACK_WAIT_MS,
-  };
+function directWaitOptions(body, wait, waitMs, terminalDefaultMs) {
+  return withWaitOptions(body, {
+    wait,
+    waitMs,
+    terminalDefaultMs,
+    ackDefaultMs: DEFAULT_ACK_WAIT_MS,
+    defaultWait: DEFAULT_DIRECT_WAIT,
+  });
 }
 
 async function bridgeJson(path, options = {}) {

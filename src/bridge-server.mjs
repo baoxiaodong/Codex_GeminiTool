@@ -7,6 +7,7 @@ import { defaultOutputRoot, resolveOutputPath } from './output-paths.mjs';
 import { endpointType, normalizeTaskRequest, toExtensionPrompt } from './protocol.mjs';
 import { createTaskStore } from './task-store.mjs';
 import { httpError, readJsonBody, requireToken, sendError, sendJson } from './http-utils.mjs';
+import { saveCodeResultFiles } from './result-files.mjs';
 
 const HOST = process.env.GEMINI_BRIDGE_HOST ?? '127.0.0.1';
 const PORT = Number(process.env.GEMINI_BRIDGE_PORT ?? 8765);
@@ -282,14 +283,15 @@ async function completeFromPayload(taskId, payload) {
     return store.failTask(taskId, payload.error ?? 'Gemini web task failed');
   }
 
-  const result = await normalizeResultPayload(taskId, payload.result ?? payload);
+  const task = store.getTask(taskId);
+  const result = await normalizeResultPayload(taskId, payload.result ?? payload, task?.type);
   if (result.raw?.submission?.didSubmit === false && result.media.length === 0 && result.files.length === 0) {
     return store.failTask(taskId, `Composer did not submit prompt: ${JSON.stringify(result.raw.submission)}`);
   }
   return store.completeTask(taskId, result);
 }
 
-async function normalizeResultPayload(taskId, payload) {
+async function normalizeResultPayload(taskId, payload, taskType = '') {
   const result = {
     text: typeof payload.text === 'string' ? payload.text : '',
     codeBlocks: Array.isArray(payload.codeBlocks) ? payload.codeBlocks : [],
@@ -303,6 +305,11 @@ async function normalizeResultPayload(taskId, payload) {
       const file = await saveDataUrl(taskId, item);
       result.files.push(file);
     }
+  }
+
+  if (taskType === 'code') {
+    const files = await saveCodeResultFiles(OUTPUT_ROOT, taskId, result);
+    result.files.push(...files);
   }
 
   return result;

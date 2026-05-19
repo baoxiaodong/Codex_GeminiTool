@@ -24,6 +24,8 @@ export function formatToolPayload(payload) {
     lines.push('Files:');
     for (const file of files) {
       lines.push(`- ${file.kind}: ${file.path}`);
+      const preview = filePreviewMarkdown(file);
+      if (preview) lines.push(preview);
     }
   }
 
@@ -38,6 +40,8 @@ export function formatToolPayload(payload) {
         item.url,
       ].filter(Boolean);
       lines.push(`- ${parts.join(' ')}`);
+      const preview = mediaPreviewMarkdown(item);
+      if (preview) lines.push(preview);
     }
   }
 
@@ -114,6 +118,48 @@ export function readDataUrl(dataUrl) {
       ? Buffer.from(match[3], 'base64')
       : Buffer.from(decodeURIComponent(match[3]), 'utf8'),
   };
+}
+
+function filePreviewMarkdown(file) {
+  const path = normalizeMarkdownPath(file?.path);
+  if (!path) return '';
+
+  if (file.kind === 'image' || String(file.mimeType || '').startsWith('image/')) {
+    return `![Gemini image](${path})`;
+  }
+
+  if (file.kind === 'video' || String(file.mimeType || '').startsWith('video/')) {
+    return `![Gemini video](${path})`;
+  }
+
+  return '';
+}
+
+function normalizeMarkdownPath(value) {
+  if (typeof value !== 'string') return '';
+  return value.replaceAll('\\', '/');
+}
+
+function mediaPreviewMarkdown(item) {
+  const url = normalizePreviewUrl(item?.url);
+  if (!url) return '';
+
+  if (item.kind === 'image' || String(item.mimeType || '').startsWith('image/')) {
+    return `![Gemini image](${url})`;
+  }
+
+  if (item.kind === 'video' || String(item.mimeType || '').startsWith('video/')) {
+    return `![Gemini video](${url})`;
+  }
+
+  return '';
+}
+
+function normalizePreviewUrl(value) {
+  if (typeof value !== 'string') return '';
+  const trimmed = value.trim();
+  if (!/^https?:\/\//i.test(trimmed)) return '';
+  return trimmed;
 }
 
 function summarizeTask(payload) {
