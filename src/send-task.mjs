@@ -23,6 +23,9 @@ const waitMs = endpoint === 'video'
     ? 600000
     : 120000;
 
+const wait = process.env.GEMINI_BRIDGE_CLI_WAIT === 'true';
+const waitAckMs = Number(process.env.GEMINI_BRIDGE_CLI_WAIT_ACK_MS ?? 5000);
+
 const response = await fetch(`${BRIDGE_URL}/${endpoint}`, {
   method: 'POST',
   headers: {
@@ -31,8 +34,9 @@ const response = await fetch(`${BRIDGE_URL}/${endpoint}`, {
   },
   body: JSON.stringify({
     prompt,
-    wait: true,
-    waitMs,
+    wait,
+    waitMs: wait ? waitMs : undefined,
+    waitAckMs: wait ? undefined : waitAckMs,
   }),
 });
 

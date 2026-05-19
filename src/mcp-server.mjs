@@ -1,10 +1,11 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import * as z from 'zod/v4';
-import { formatToolPayload } from './mcp-format.mjs';
+import { dataUrlToImageContent, formatToolPayload } from './mcp-format.mjs';
 
 const BRIDGE_URL = process.env.GEMINI_BRIDGE_URL ?? 'http://127.0.0.1:8765';
 const TOKEN = process.env.GEMINI_BRIDGE_TOKEN ?? '';
+const DEFAULT_ACK_WAIT_MS = Number(process.env.GEMINI_BRIDGE_MCP_ACK_WAIT_MS ?? 5000);
 
 const server = new McpServer({
   name: 'gemini-web-bridge',
@@ -36,10 +37,11 @@ server.registerTool(
     inputSchema: z.object({
       prompt: z.string().min(1),
       context: z.string().optional(),
+      wait: z.boolean().optional(),
       waitMs: z.number().int().positive().max(1800000).optional(),
     }),
   },
-  async ({ prompt, context = '', waitMs = 120000 }) => textResult(await submitTask('/ask', { prompt, context, wait: true, waitMs })),
+  async ({ prompt, context = '', wait = false, waitMs }) => textResult(await submitTask('/ask', withWaitOptions({ prompt, context }, wait, waitMs, 120000))),
 );
 
 server.registerTool(
@@ -49,10 +51,11 @@ server.registerTool(
     inputSchema: z.object({
       prompt: z.string().min(1),
       context: z.string().optional(),
+      wait: z.boolean().optional(),
       waitMs: z.number().int().positive().max(1800000).optional(),
     }),
   },
-  async ({ prompt, context = '', waitMs = 120000 }) => textResult(await submitTask('/ask', { prompt, context, wait: true, waitMs })),
+  async ({ prompt, context = '', wait = false, waitMs }) => textResult(await submitTask('/ask', withWaitOptions({ prompt, context }, wait, waitMs, 120000))),
 );
 
 server.registerTool(
@@ -62,10 +65,11 @@ server.registerTool(
     inputSchema: z.object({
       prompt: z.string().min(1),
       context: z.string().optional(),
+      wait: z.boolean().optional(),
       waitMs: z.number().int().positive().max(1800000).optional(),
     }),
   },
-  async ({ prompt, context = '', waitMs = 120000 }) => textResult(await submitTask('/code', { prompt, context, wait: true, waitMs })),
+  async ({ prompt, context = '', wait = false, waitMs }) => textResult(await submitTask('/code', withWaitOptions({ prompt, context }, wait, waitMs, 120000))),
 );
 
 server.registerTool(
@@ -75,62 +79,87 @@ server.registerTool(
     inputSchema: z.object({
       prompt: z.string().min(1),
       context: z.string().optional(),
+      wait: z.boolean().optional(),
       waitMs: z.number().int().positive().max(1800000).optional(),
     }),
   },
-  async ({ prompt, context = '', waitMs = 120000 }) => textResult(await submitTask('/code', { prompt, context, wait: true, waitMs })),
+  async ({ prompt, context = '', wait = false, waitMs }) => textResult(await submitTask('/code', withWaitOptions({ prompt, context }, wait, waitMs, 120000))),
 );
 
 server.registerTool(
   'gemini_web_generate_image',
   {
-    description: 'Ask Gemini web to generate an image and return extracted media URLs or saved output files.',
+    description: 'Ask Gemini web to generate an image and return extracted media URLs or saved output files. Defaults to async submit to avoid Codex tool timeouts; pass wait=true only for short tests.',
     inputSchema: z.object({
       prompt: z.string().min(1),
       outputDir: z.string().optional(),
+      wait: z.boolean().optional(),
       waitMs: z.number().int().positive().max(1800000).optional(),
     }),
   },
-  async ({ prompt, outputDir = '', waitMs = 600000 }) => textResult(await submitTask('/image', { prompt, outputDir, wait: true, waitMs })),
+  async ({ prompt, outputDir = '', wait = false, waitMs }) => textResult(await submitTask('/image', withWaitOptions({ prompt, outputDir }, wait, waitMs, 600000))),
 );
 
 server.registerTool(
   'gemini_image',
   {
-    description: 'Short alias. Ask Gemini web to generate an image. Use when the user says "用gemini生图", "gemini画图", or "gemini image".',
+    description: 'Short alias. Ask Gemini web to generate an image. Defaults to async submit to avoid Codex tool timeouts; use gemini_get_task to fetch the result.',
     inputSchema: z.object({
       prompt: z.string().min(1),
       outputDir: z.string().optional(),
+      wait: z.boolean().optional(),
       waitMs: z.number().int().positive().max(1800000).optional(),
     }),
   },
-  async ({ prompt, outputDir = '', waitMs = 600000 }) => textResult(await submitTask('/image', { prompt, outputDir, wait: true, waitMs })),
+  async ({ prompt, outputDir = '', wait = false, waitMs }) => textResult(await submitTask('/image', withWaitOptions({ prompt, outputDir }, wait, waitMs, 600000))),
 );
 
 server.registerTool(
   'gemini_web_generate_video',
   {
-    description: 'Ask Gemini web to generate a video if the logged-in account has video generation available.',
+    description: 'Ask Gemini web to generate a video if the logged-in account has video generation available. Defaults to async submit to avoid Codex tool timeouts; pass wait=true only for short tests.',
     inputSchema: z.object({
       prompt: z.string().min(1),
       outputDir: z.string().optional(),
+      wait: z.boolean().optional(),
       waitMs: z.number().int().positive().max(1800000).optional(),
     }),
   },
-  async ({ prompt, outputDir = '', waitMs = 1800000 }) => textResult(await submitTask('/video', { prompt, outputDir, wait: true, waitMs })),
+  async ({ prompt, outputDir = '', wait = false, waitMs }) => textResult(await submitTask('/video', withWaitOptions({ prompt, outputDir }, wait, waitMs, 1800000))),
 );
 
 server.registerTool(
   'gemini_video',
   {
-    description: 'Short alias. Ask Gemini web to generate a video if the logged-in account supports it. Use when the user says "用gemini视频", "用gemini生成视频", or "gemini video".',
+    description: 'Short alias. Ask Gemini web to generate a video if the logged-in account supports it. Defaults to async submit to avoid Codex tool timeouts; use gemini_get_task to fetch the result.',
     inputSchema: z.object({
       prompt: z.string().min(1),
       outputDir: z.string().optional(),
+      wait: z.boolean().optional(),
       waitMs: z.number().int().positive().max(1800000).optional(),
     }),
   },
-  async ({ prompt, outputDir = '', waitMs = 1800000 }) => textResult(await submitTask('/video', { prompt, outputDir, wait: true, waitMs })),
+  async ({ prompt, outputDir = '', wait = false, waitMs }) => textResult(await submitTask('/video', withWaitOptions({ prompt, outputDir }, wait, waitMs, 1800000))),
+);
+
+server.registerTool(
+  'gemini_get_task',
+  {
+    description: 'Fetch a Gemini bridge task by id. Use this after async image/video generation to retrieve final text, image content, media, and saved files.',
+    inputSchema: z.object({
+      taskId: z.string().min(1),
+    }),
+  },
+  async ({ taskId }) => textResult(await bridgeJson(`/tasks/${encodeURIComponent(taskId)}`)),
+);
+
+server.registerTool(
+  'gemini_list_tasks',
+  {
+    description: 'List recent Gemini bridge tasks and their statuses.',
+    inputSchema: z.object({}),
+  },
+  async () => textResult(await bridgeJson('/tasks')),
 );
 
 const transport = new StdioServerTransport();
@@ -141,6 +170,22 @@ async function submitTask(path, body) {
     method: 'POST',
     body: JSON.stringify(body),
   });
+}
+
+function withWaitOptions(body, wait, waitMs, terminalDefaultMs) {
+  if (wait) {
+    return {
+      ...body,
+      wait: true,
+      waitMs: waitMs ?? terminalDefaultMs,
+    };
+  }
+
+  return {
+    ...body,
+    wait: false,
+    waitAckMs: waitMs ?? DEFAULT_ACK_WAIT_MS,
+  };
 }
 
 async function bridgeJson(path, options = {}) {
@@ -164,6 +209,11 @@ async function bridgeJson(path, options = {}) {
 
 function textResult(payload) {
   const formatted = formatToolPayload(payload);
+  const media = Array.isArray(formatted.structured.media) ? formatted.structured.media : [];
+  const imageContent = media
+    .map((item) => dataUrlToImageContent(item?.dataUrl))
+    .filter(Boolean);
+
   return {
     structuredContent: formatted.structured,
     content: [
@@ -171,6 +221,7 @@ function textResult(payload) {
         type: 'text',
         text: formatted.text,
       },
+      ...imageContent,
     ],
   };
 }

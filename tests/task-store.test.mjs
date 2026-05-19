@@ -24,6 +24,8 @@ test('claims queued tasks once and marks them in progress', () => {
   assert.equal(claimed.status, 'in_progress');
   assert.equal(secondClaim, null);
   assert.equal(store.getTask(first.id).status, 'in_progress');
+  assert.ok(store.getTask(first.id).claimedAt);
+  assert.ok(store.getTask(first.id).heartbeatAt);
 });
 
 test('completes tasks with result payloads', () => {
@@ -44,4 +46,33 @@ test('fails unknown tasks with actionable errors', () => {
     () => store.completeTask('missing', {}),
     /Unknown task id: missing/,
   );
+});
+
+test('touches in-progress tasks and requeues stale tasks', () => {
+  let now = new Date('2026-05-14T08:00:00.000Z');
+  const store = createTaskStore({ now: () => now });
+  const task = store.createTask({ type: 'ask', prompt: 'hello' });
+  store.claimNextTask();
+
+  now = new Date('2026-05-14T08:00:10.000Z');
+  const touched = store.touchTask(task.id);
+  assert.equal(touched.heartbeatAt, '2026-05-14T08:00:10.000Z');
+
+  now = new Date('2026-05-14T08:01:00.000Z');
+  const requeued = store.requeueStaleTasks(45000);
+
+  assert.equal(requeued.length, 1);
+  assert.equal(store.getTask(task.id).status, 'queued');
+  assert.equal(store.getTask(task.id).claimedAt, null);
+});
+
+test('waits for status changes without waiting for terminal completion', async () => {
+  const store = createTaskStore();
+  const task = store.createTask({ type: 'code', prompt: 'write code' });
+
+  const waiting = store.waitForStatus(task.id, ['in_progress'], 1000);
+  store.claimNextTask();
+
+  const claimed = await waiting;
+  assert.equal(claimed.status, 'in_progress');
 });

@@ -24,6 +24,8 @@ export function createTaskStore(options = {}) {
       status: 'queued',
       createdAt,
       updatedAt: createdAt,
+      claimedAt: null,
+      heartbeatAt: null,
       result: null,
       error: null,
     };
@@ -33,11 +35,17 @@ export function createTaskStore(options = {}) {
     return cloneTask(task);
   }
 
-  function claimNextTask() {
+  function claimNextTask(options = {}) {
+    if (Number(options.requeueStaleMs) > 0) {
+      requeueStaleTasks(Number(options.requeueStaleMs));
+    }
+
     for (const task of tasks.values()) {
       if (task.status === 'queued') {
         task.status = 'in_progress';
-        task.updatedAt = timestamp();
+        task.claimedAt = timestamp();
+        task.heartbeatAt = task.claimedAt;
+        task.updatedAt = task.claimedAt;
         events.emit('updated', cloneTask(task));
         return cloneTask(task);
       }
@@ -59,6 +67,7 @@ export function createTaskStore(options = {}) {
     task.status = 'completed';
     task.result = result;
     task.error = null;
+    task.heartbeatAt = null;
     task.updatedAt = timestamp();
     events.emit('updated', cloneTask(task));
     events.emit(`done:${id}`, cloneTask(task));
@@ -70,10 +79,42 @@ export function createTaskStore(options = {}) {
     task.status = 'failed';
     task.result = null;
     task.error = typeof error === 'string' ? error : error?.message ?? 'Unknown extension error';
+    task.heartbeatAt = null;
     task.updatedAt = timestamp();
     events.emit('updated', cloneTask(task));
     events.emit(`done:${id}`, cloneTask(task));
     return cloneTask(task);
+  }
+
+  function touchTask(id) {
+    const task = tasks.get(id);
+    if (!task || task.status !== 'in_progress') {
+      return null;
+    }
+
+    task.heartbeatAt = timestamp();
+    events.emit('updated', cloneTask(task));
+    return cloneTask(task);
+  }
+
+  function requeueStaleTasks(timeoutMs) {
+    const nowMs = Date.parse(timestamp());
+    const requeued = [];
+
+    for (const task of tasks.values()) {
+      if (task.status !== 'in_progress') continue;
+      const lastActiveAt = Date.parse(task.heartbeatAt ?? task.updatedAt);
+      if (!Number.isFinite(lastActiveAt) || nowMs - lastActiveAt <= timeoutMs) continue;
+
+      task.status = 'queued';
+      task.claimedAt = null;
+      task.heartbeatAt = null;
+      task.updatedAt = timestamp();
+      events.emit('updated', cloneTask(task));
+      requeued.push(cloneTask(task));
+    }
+
+    return requeued;
   }
 
   function waitForTerminal(id, timeoutMs) {
@@ -101,6 +142,37 @@ export function createTaskStore(options = {}) {
     });
   }
 
+  function waitForStatus(id, statuses, timeoutMs) {
+    const wanted = new Set(statuses);
+    const existing = getTask(id);
+    if (!existing) {
+      return Promise.reject(new Error(`Unknown task id: ${id}`));
+    }
+
+    if (wanted.has(existing.status)) {
+      return Promise.resolve(existing);
+    }
+
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        events.off('updated', onUpdated);
+        reject(new Error(`Timed out waiting for task ${id} to reach ${Array.from(wanted).join(', ')}`));
+      }, timeoutMs);
+
+      function onUpdated(task) {
+        if (task.id !== id || !wanted.has(task.status)) {
+          return;
+        }
+
+        clearTimeout(timer);
+        events.off('updated', onUpdated);
+        resolve(task);
+      }
+
+      events.on('updated', onUpdated);
+    });
+  }
+
   return {
     createTask,
     claimNextTask,
@@ -108,7 +180,10 @@ export function createTaskStore(options = {}) {
     listTasks,
     completeTask,
     failTask,
+    touchTask,
+    requeueStaleTasks,
     waitForTerminal,
+    waitForStatus,
     events,
   };
 }

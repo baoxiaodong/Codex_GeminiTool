@@ -1,8 +1,11 @@
 export function formatToolPayload(payload) {
-  const summary = normalizeSummary(payload.text);
-  const codeBlocks = Array.isArray(payload.codeBlocks) ? payload.codeBlocks.filter(Boolean) : [];
-  const files = Array.isArray(payload.files) ? payload.files : [];
-  const media = Array.isArray(payload.media) ? payload.media : [];
+  const displayPayload = payload?.result && typeof payload.result === 'object' ? payload.result : payload;
+  const tasks = Array.isArray(payload?.tasks) ? payload.tasks : [];
+  const singleTask = isTaskPayload(payload) ? summarizeTask(payload) : null;
+  const summary = normalizeSummary(displayPayload?.text);
+  const codeBlocks = Array.isArray(displayPayload?.codeBlocks) ? displayPayload.codeBlocks.filter(Boolean) : [];
+  const files = Array.isArray(displayPayload?.files) ? displayPayload.files : [];
+  const media = Array.isArray(displayPayload?.media) ? displayPayload.media : [];
 
   const lines = [];
   if (summary) {
@@ -24,13 +27,40 @@ export function formatToolPayload(payload) {
     }
   }
 
-  if (!summary && codeBlocks.length === 0 && files.length === 0) {
-    const statusLines = summarizeObjectPayload(payload);
-    lines.push(...statusLines);
+  if (media.length > 0) {
+    lines.push('Media:');
+    for (const item of media) {
+      const parts = [
+        item.kind ?? 'media',
+        item.mimeType,
+        item.width && item.height ? `${item.width}x${item.height}` : '',
+        item.duration ? `${Math.round(item.duration)}s` : '',
+        item.url,
+      ].filter(Boolean);
+      lines.push(`- ${parts.join(' ')}`);
+    }
   }
 
-  if (!summary && codeBlocks.length === 0 && files.length === 0 && media.length > 0) {
-    lines.push(`Media items: ${media.length}`);
+  if (tasks.length > 0) {
+    lines.push('Tasks:');
+    for (const task of tasks) {
+      lines.push(`- ${task.id}: ${task.type} ${task.status}${task.error ? ` (${task.error})` : ''}`);
+    }
+  }
+
+  if (singleTask && !payload?.result) {
+    lines.push(`Task: ${singleTask.id} ${singleTask.type} ${singleTask.status}${singleTask.error ? ` (${singleTask.error})` : ''}`);
+    if (typeof payload.warning === 'string' && payload.warning.trim()) {
+      lines.push(`Warning: ${payload.warning.trim()}`);
+    }
+    if (singleTask.status === 'queued' || singleTask.status === 'in_progress') {
+      lines.push(`Use gemini_get_task with taskId "${singleTask.id}" to fetch the result later.`);
+    }
+  }
+
+  if (!summary && codeBlocks.length === 0 && files.length === 0 && media.length === 0 && tasks.length === 0 && !singleTask) {
+    const statusLines = summarizeObjectPayload(payload);
+    lines.push(...statusLines);
   }
 
   if (lines.length === 0) {
@@ -44,9 +74,59 @@ export function formatToolPayload(payload) {
       codeBlocks,
       files,
       media,
-      raw: payload.raw ?? null,
+      tasks,
+      raw: displayPayload?.raw ?? null,
+      task: singleTask,
     },
   };
+}
+
+export function dataUrlToImageContent(dataUrl) {
+  if (typeof dataUrl !== 'string') return null;
+
+  const match = dataUrl.match(/^data:(image\/[^;,]+)(;base64)?,(.*)$/s);
+  if (!match) return null;
+
+  if (match[2]) {
+    return {
+      type: 'image',
+      data: match[3],
+      mimeType: match[1],
+    };
+  }
+
+  return {
+    type: 'image',
+    data: Buffer.from(decodeURIComponent(match[3]), 'utf8').toString('base64'),
+    mimeType: match[1],
+  };
+}
+
+export function readDataUrl(dataUrl) {
+  if (typeof dataUrl !== 'string') return null;
+
+  const match = dataUrl.match(/^data:([^;,]+)(;base64)?,(.*)$/s);
+  if (!match) return null;
+
+  return {
+    mimeType: match[1],
+    buffer: match[2]
+      ? Buffer.from(match[3], 'base64')
+      : Buffer.from(decodeURIComponent(match[3]), 'utf8'),
+  };
+}
+
+function summarizeTask(payload) {
+  return {
+    id: payload.id ?? null,
+    status: payload.status ?? null,
+    type: payload.type ?? null,
+    error: payload.error ?? null,
+  };
+}
+
+function isTaskPayload(payload) {
+  return Boolean(payload && typeof payload === 'object' && typeof payload.id === 'string' && typeof payload.status === 'string');
 }
 
 function normalizeSummary(text) {
@@ -62,11 +142,22 @@ function summarizeObjectPayload(payload) {
     'ok',
     'bridge',
     'polling',
+    'expectedGeminiScriptVersion',
+    'staleTaskMs',
     'geminiPagePollingActive',
+    'legacyGeminiPagePollingActive',
     'outputRoot',
+    'lastGeminiScriptVersion',
     'lastGeminiPagePollAt',
+    'lastLegacyGeminiPagePollAt',
+    'lastIgnoredGeminiScriptVersion',
+    'lastIgnoredGeminiPagePollAt',
     'secondsSinceLastGeminiPagePoll',
+    'secondsSinceLastLegacyGeminiPagePoll',
+    'secondsSinceLastIgnoredGeminiPagePoll',
     'geminiPagePollCount',
+    'legacyGeminiPagePollCount',
+    'ignoredGeminiPagePollCount',
     'error',
   ];
 

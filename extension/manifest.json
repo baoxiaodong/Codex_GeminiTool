@@ -1,9 +1,10 @@
 {
   "manifest_version": 3,
   "name": "Gemini Web Bridge",
-  "version": "0.1.0",
+  "version": "0.1.19",
+  "version_name": "0.1.19 (script 2026-05-18-v19)",
   "description": "Bridge Codex tasks to the logged-in Gemini web app.",
-  "permissions": ["downloads", "tabs"],
+  "permissions": ["debugger", "downloads", "tabs"],
   "host_permissions": [
     "https://gemini.google.com/*",
     "http://127.0.0.1:8765/*"
