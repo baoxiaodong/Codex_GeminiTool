@@ -8,6 +8,7 @@ import { endpointType, normalizeTaskRequest, toExtensionPrompt } from './protoco
 import { createTaskStore } from './task-store.mjs';
 import { httpError, readJsonBody, requireToken, sendError, sendJson } from './http-utils.mjs';
 import { saveCodeResultFiles } from './result-files.mjs';
+import { appendTaskIndex } from './task-index.mjs';
 
 const HOST = process.env.GEMINI_BRIDGE_HOST ?? '127.0.0.1';
 const PORT = Number(process.env.GEMINI_BRIDGE_PORT ?? 8765);
@@ -288,7 +289,9 @@ async function completeFromPayload(taskId, payload) {
   if (result.raw?.submission?.didSubmit === false && result.media.length === 0 && result.files.length === 0) {
     return store.failTask(taskId, `Composer did not submit prompt: ${JSON.stringify(result.raw.submission)}`);
   }
-  return store.completeTask(taskId, result);
+  const completed = store.completeTask(taskId, result);
+  await appendTaskIndex(OUTPUT_ROOT, completed);
+  return completed;
 }
 
 async function normalizeResultPayload(taskId, payload, taskType = '') {

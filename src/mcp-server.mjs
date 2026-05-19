@@ -3,6 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import * as z from 'zod/v4';
 import { dataUrlToImageContent, formatToolPayload } from './mcp-format.mjs';
 import { withWaitOptions } from './mcp-options.mjs';
+import { endpointForRunType, runBodyForType, runWaitMsForType } from './mcp-run.mjs';
 
 const BRIDGE_URL = process.env.GEMINI_BRIDGE_URL ?? 'http://127.0.0.1:8765';
 const TOKEN = process.env.GEMINI_BRIDGE_TOKEN ?? '';
@@ -13,6 +14,26 @@ const server = new McpServer({
   name: 'gemini-web-bridge',
   version: '0.1.0',
 });
+
+server.registerTool(
+  'gemini_run',
+  {
+    description: 'Unified Gemini Agent tool. Route one request to Gemini web for text, code, image, or video generation and return the final displayable result by default.',
+    inputSchema: z.object({
+      type: z.enum(['ask', 'text', 'chat', 'question', 'code', 'write_code', 'image', 'generate_image', 'video', 'generate_video']).default('ask'),
+      prompt: z.string().min(1),
+      context: z.string().optional(),
+      outputDir: z.string().optional(),
+      wait: z.boolean().optional(),
+      waitMs: z.number().int().positive().max(1800000).optional(),
+    }),
+  },
+  async ({ type = 'ask', prompt, context = '', outputDir = '', wait, waitMs }) => {
+    const endpoint = endpointForRunType(type);
+    const body = runBodyForType({ type, prompt, context, outputDir });
+    return textResult(await submitTask(endpoint, directWaitOptions(body, wait, waitMs, runWaitMsForType(type))));
+  },
+);
 
 server.registerTool(
   'gemini_web_status',
