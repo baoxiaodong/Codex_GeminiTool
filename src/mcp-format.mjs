@@ -1,3 +1,8 @@
+import path from 'node:path';
+import { readFile as readFileFromDisk } from 'node:fs/promises';
+
+const DEFAULT_MAX_EMBEDDED_FILE_BYTES = 15 * 1024 * 1024;
+
 export function formatToolPayload(payload) {
   const displayPayload = payload?.result && typeof payload.result === 'object' ? payload.result : payload;
   const tasks = Array.isArray(payload?.tasks) ? payload.tasks : [];
@@ -17,31 +22,6 @@ export function formatToolPayload(payload) {
       lines.push('```text');
       lines.push(block);
       lines.push('```');
-    }
-  }
-
-  if (files.length > 0) {
-    lines.push('Files:');
-    for (const file of files) {
-      lines.push(`- ${file.kind}: ${file.path}`);
-      const preview = filePreviewMarkdown(file);
-      if (preview) lines.push(preview);
-    }
-  }
-
-  if (media.length > 0) {
-    lines.push('Media:');
-    for (const item of media) {
-      const parts = [
-        item.kind ?? 'media',
-        item.mimeType,
-        item.width && item.height ? `${item.width}x${item.height}` : '',
-        item.duration ? `${Math.round(item.duration)}s` : '',
-        item.url,
-      ].filter(Boolean);
-      lines.push(`- ${parts.join(' ')}`);
-      const preview = mediaPreviewMarkdown(item);
-      if (preview) lines.push(preview);
     }
   }
 
@@ -106,6 +86,50 @@ export function dataUrlToImageContent(dataUrl) {
   };
 }
 
+export async function filesToContentBlocks(files, options = {}) {
+  if (!Array.isArray(files)) return [];
+
+  const blocks = [];
+  for (const file of files) {
+    blocks.push(...await fileToContentBlocks(file, options));
+  }
+  return blocks;
+}
+
+export async function fileToContentBlocks(file, options = {}) {
+  const filePath = typeof file?.path === 'string' ? file.path.trim() : '';
+  if (!filePath) return [];
+
+  const mimeType = typeof file.mimeType === 'string' && file.mimeType.trim()
+    ? file.mimeType.trim()
+    : mimeTypeForFilePath(filePath);
+  const content = [];
+
+  if (isImageFile(file, mimeType)) {
+    const readFile = options.readFile ?? readFileFromDisk;
+    try {
+      const data = await readFile(filePath);
+      content.push({
+        type: 'image',
+        data: Buffer.from(data).toString('base64'),
+        mimeType,
+      });
+    } catch {
+      // Keep the resource link below even when the image bytes are unavailable.
+    }
+  }
+
+  if (isEmbeddedMediaFile(file, mimeType)) {
+    const embedded = await fileToEmbeddedResource(filePath, mimeType, options);
+    if (embedded) content.push(embedded);
+  }
+
+  const resourceLink = fileToResourceLink(filePath, mimeType);
+  if (resourceLink) content.push(resourceLink);
+
+  return content;
+}
+
 export function readDataUrl(dataUrl) {
   if (typeof dataUrl !== 'string') return null;
 
@@ -120,46 +144,85 @@ export function readDataUrl(dataUrl) {
   };
 }
 
-function filePreviewMarkdown(file) {
-  const path = normalizeMarkdownPath(file?.path);
-  if (!path) return '';
+async function fileToEmbeddedResource(filePath, mimeType, options = {}) {
+  const readFile = options.readFile ?? readFileFromDisk;
+  const maxBytes = Number.isFinite(options.maxEmbeddedBytes)
+    ? options.maxEmbeddedBytes
+    : DEFAULT_MAX_EMBEDDED_FILE_BYTES;
 
-  if (file.kind === 'image' || String(file.mimeType || '').startsWith('image/')) {
-    return `![Gemini image](${path})`;
+  try {
+    const data = Buffer.from(await readFile(filePath));
+    if (maxBytes >= 0 && data.byteLength > maxBytes) return null;
+    return {
+      type: 'resource',
+      resource: {
+        uri: filePathToUri(filePath),
+        mimeType,
+        blob: data.toString('base64'),
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
+function fileToResourceLink(filePath, mimeType) {
+  const uri = filePathToUri(filePath);
+  if (!uri) return null;
+
+  return {
+    type: 'resource_link',
+    uri,
+    name: path.basename(filePath),
+    ...(mimeType ? { mimeType } : {}),
+  };
+}
+
+function filePathToUri(filePath) {
+  const normalized = normalizeMarkdownPath(filePath).trim();
+  if (!normalized) return '';
+
+  if (/^[a-z]+:\/\//i.test(normalized)) return normalized;
+
+  if (/^[A-Za-z]:\//.test(normalized)) {
+    return `file:///${encodeURI(normalized).replaceAll('%5C', '/')}`;
   }
 
-  if (file.kind === 'video' || String(file.mimeType || '').startsWith('video/')) {
-    return `![Gemini video](${path})`;
+  if (normalized.startsWith('/')) {
+    return `file://${encodeURI(normalized)}`;
   }
 
+  return '';
+}
+
+function isImageFile(file, mimeType) {
+  return file?.kind === 'image' || String(mimeType || '').startsWith('image/');
+}
+
+function isEmbeddedMediaFile(file, mimeType) {
+  return file?.kind === 'video'
+    || file?.kind === 'audio'
+    || String(mimeType || '').startsWith('video/')
+    || String(mimeType || '').startsWith('audio/');
+}
+
+function mimeTypeForFilePath(filePath) {
+  const extension = path.extname(filePath).toLowerCase();
+  if (extension === '.png') return 'image/png';
+  if (extension === '.jpg' || extension === '.jpeg') return 'image/jpeg';
+  if (extension === '.webp') return 'image/webp';
+  if (extension === '.gif') return 'image/gif';
+  if (extension === '.mp4') return 'video/mp4';
+  if (extension === '.webm') return 'video/webm';
+  if (extension === '.mov') return 'video/quicktime';
+  if (extension === '.md') return 'text/markdown';
+  if (extension === '.txt') return 'text/plain';
   return '';
 }
 
 function normalizeMarkdownPath(value) {
   if (typeof value !== 'string') return '';
   return value.replaceAll('\\', '/');
-}
-
-function mediaPreviewMarkdown(item) {
-  const url = normalizePreviewUrl(item?.url);
-  if (!url) return '';
-
-  if (item.kind === 'image' || String(item.mimeType || '').startsWith('image/')) {
-    return `![Gemini image](${url})`;
-  }
-
-  if (item.kind === 'video' || String(item.mimeType || '').startsWith('video/')) {
-    return `![Gemini video](${url})`;
-  }
-
-  return '';
-}
-
-function normalizePreviewUrl(value) {
-  if (typeof value !== 'string') return '';
-  const trimmed = value.trim();
-  if (!/^https?:\/\//i.test(trimmed)) return '';
-  return trimmed;
 }
 
 function summarizeTask(payload) {
@@ -187,6 +250,7 @@ function summarizeObjectPayload(payload) {
   const preferredKeys = [
     'ok',
     'bridge',
+    'executionModes',
     'polling',
     'expectedGeminiScriptVersion',
     'staleTaskMs',

@@ -1,0 +1,1525 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Codex Gemini Agent | History Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        :root {
+            --bg-main: #0b0c0e;
+            --bg-surface: #13151a;
+            --bg-surface-hover: #1c1f26;
+            --bg-elevated: #181b22;
+            --border-color: #222630;
+            --border-strong: #343948;
+            --text-primary: #f3f4f6;
+            --text-secondary: #a7afbd;
+            --text-muted: #6b7280;
+            --accent-purple: #8b5cf6;
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --accent-orange: #f59e0b;
+            --danger: #f87171;
+            --success-bg: rgba(16, 185, 129, 0.1);
+            --success-text: #34d399;
+            --running-bg: rgba(59, 130, 246, 0.1);
+            --running-text: #60a5fa;
+            --failed-bg: rgba(239, 68, 68, 0.1);
+            --failed-text: #f87171;
+            --shadow-lg: 0 24px 48px rgba(0, 0, 0, 0.45);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background:
+                radial-gradient(circle at top left, rgba(139, 92, 246, 0.14), transparent 32rem),
+                radial-gradient(circle at top right, rgba(59, 130, 246, 0.08), transparent 28rem),
+                var(--bg-main);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        button, input, a { font: inherit; }
+
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: 1rem 2rem;
+            background-color: rgba(19, 21, 26, 0.82);
+            border-bottom: 1px solid var(--border-color);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(12px);
+        }
+
+        .brand { display: flex; align-items: center; gap: 0.75rem; min-width: 0; }
+
+        .brand-logo {
+            width: 28px;
+            height: 28px;
+            background: linear-gradient(135deg, #a78bfa, #3b82f6);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            box-shadow: 0 10px 24px rgba(59, 130, 246, 0.18);
+            flex: 0 0 auto;
+        }
+
+        .brand-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            min-width: 0;
+        }
+
+        .brand-title span {
+            color: var(--text-muted);
+            font-weight: 400;
+            font-size: 0.95rem;
+        }
+
+        .header-actions { display: flex; align-items: center; gap: 1rem; }
+
+        .search-wrapper { position: relative; display: flex; align-items: center; }
+
+        .search-wrapper i {
+            position: absolute;
+            left: 0.75rem;
+            color: var(--text-muted);
+            pointer-events: none;
+        }
+
+        .search-input {
+            background-color: var(--bg-main);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 0.55rem 1rem 0.55rem 2.25rem;
+            color: var(--text-primary);
+            font-size: 0.875rem;
+            width: 260px;
+            transition: all 0.2s ease;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: var(--accent-purple);
+            width: 320px;
+            box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.16);
+        }
+
+        .btn-refresh,
+        .soft-btn,
+        .icon-btn {
+            background-color: var(--bg-surface);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            border-radius: 8px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.45rem;
+            font-size: 0.86rem;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.18s ease;
+        }
+
+        .btn-refresh { padding: 0.55rem 1rem; }
+        .soft-btn { padding: 0.45rem 0.7rem; }
+        .icon-btn { width: 34px; height: 34px; padding: 0; }
+
+        .btn-refresh:hover,
+        .soft-btn:hover,
+        .icon-btn:hover {
+            background-color: var(--bg-surface-hover);
+            border-color: var(--border-strong);
+            color: #fff;
+            transform: translateY(-1px);
+        }
+
+        .soft-btn.primary {
+            border-color: rgba(139, 92, 246, 0.55);
+            background: rgba(139, 92, 246, 0.14);
+        }
+
+        .soft-btn[disabled],
+        .icon-btn[disabled] {
+            opacity: 0.55;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        main {
+            flex: 1;
+            max-width: 1400px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 0.75rem;
+        }
+
+        .tabs { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+
+        .tab {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            padding: 0.5rem 0.9rem;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .tab:hover { color: var(--text-primary); background-color: rgba(255,255,255,0.04); }
+        .tab.active {
+            color: var(--text-primary);
+            background-color: var(--bg-surface);
+            box-shadow: inset 0 1px 0 0 rgba(255,255,255,0.06);
+        }
+
+        .stats-badge { font-size: 0.82rem; color: var(--text-muted); white-space: nowrap; }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .card {
+            background-color: rgba(19, 21, 26, 0.94);
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+            position: relative;
+            overflow: hidden;
+            cursor: pointer;
+            min-height: 232px;
+        }
+
+        .card:hover,
+        .card:focus-within {
+            border-color: rgba(139, 92, 246, 0.44);
+            box-shadow: 0 14px 28px -12px rgba(0, 0, 0, 0.68);
+            transform: translateY(-2px);
+        }
+
+        .card-header,
+        .card-footer {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 0.75rem;
+        }
+
+        .task-meta { display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; }
+        .task-id {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            letter-spacing: 0.05em;
+        }
+
+        .task-time { font-size: 0.75rem; color: var(--text-muted); }
+
+        .badge {
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 0.25rem 0.6rem;
+            border-radius: 999px;
+            text-transform: capitalize;
+            flex: 0 0 auto;
+        }
+
+        .badge.success { background-color: var(--success-bg); color: var(--success-text); }
+        .badge.running { background-color: var(--running-bg); color: var(--running-text); }
+        .badge.failed { background-color: var(--failed-bg); color: var(--failed-text); }
+
+        .card-body { display: flex; flex-direction: column; gap: 0.8rem; flex: 1; }
+        .prompt-container { display: flex; gap: 0.75rem; align-items: flex-start; }
+
+        .type-icon {
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            background-color: rgba(255, 255, 255, 0.035);
+            border: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .type-icon.code { color: var(--accent-purple); }
+        .type-icon.image { color: var(--accent-blue); }
+        .type-icon.video { color: var(--accent-orange); }
+        .type-icon.ask { color: var(--accent-green); }
+
+        .prompt-text {
+            font-size: 0.9rem;
+            line-height: 1.42rem;
+            color: var(--text-primary);
+            font-weight: 600;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            word-break: break-word;
+        }
+
+        .preview-area {
+            border-radius: 10px;
+            overflow: hidden;
+            background-color: rgba(0, 0, 0, 0.22);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            position: relative;
+        }
+
+        .preview-image {
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
+            display: block;
+        }
+
+        .preview-video {
+            width: 100%;
+            height: 150px;
+            object-fit: contain;
+            display: block;
+            background: #050608;
+        }
+
+        .image-count-badge {
+            position: absolute;
+            right: 10px;
+            top: 10px;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            padding: 0.25rem 0.55rem;
+            border-radius: 999px;
+            color: #fff;
+            background: rgba(8, 10, 14, 0.78);
+            border: 1px solid rgba(255,255,255,0.12);
+            font-size: 0.75rem;
+            backdrop-filter: blur(8px);
+        }
+
+        .preview-video-placeholder {
+            height: 150px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            color: var(--text-muted);
+            background: linear-gradient(180deg, rgba(245, 158, 11, 0.06) 0%, rgba(0,0,0,0.22) 100%);
+        }
+
+        .preview-video-placeholder span { font-size: 0.78rem; }
+
+        .preview-code {
+            padding: 0.85rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: #a7b5ca;
+            background-color: #07080a;
+            max-height: 120px;
+            overflow: hidden;
+            position: relative;
+            white-space: pre-wrap;
+        }
+
+        .preview-code::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 42px;
+            background: linear-gradient(transparent, #07080a);
+            pointer-events: none;
+        }
+
+        .card-footer {
+            border-top: 1px solid rgba(255, 255, 255, 0.045);
+            padding-top: 0.75rem;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .file-path {
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+            min-width: 0;
+            max-width: calc(100% - 40px);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .file-link,
+        .muted-link {
+            color: inherit;
+            text-decoration: none;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .file-link:hover,
+        .muted-link:hover { color: var(--text-primary); }
+
+        .empty-state {
+            grid-column: 1 / -1;
+            padding: 5rem 2rem;
+            text-align: center;
+            color: var(--text-muted);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+            border: 1px dashed var(--border-color);
+            border-radius: 16px;
+            background: rgba(19, 21, 26, 0.42);
+        }
+
+        .empty-state i { color: var(--border-strong); }
+
+        .state-panel {
+            grid-column: 1 / -1;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 0.9rem;
+            min-height: 220px;
+            padding: 2.5rem;
+            text-align: center;
+            color: var(--text-muted);
+            border: 1px dashed var(--border-color);
+            border-radius: 16px;
+            background: rgba(19, 21, 26, 0.46);
+        }
+
+        .state-panel strong {
+            color: var(--text-primary);
+            font-size: 1rem;
+        }
+
+        .state-panel.error strong { color: var(--failed-text); }
+
+        .spinner {
+            width: 30px;
+            height: 30px;
+            border: 3px solid rgba(255, 255, 255, 0.12);
+            border-top-color: var(--accent-purple);
+            border-radius: 999px;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .metadata-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 0.75rem;
+        }
+
+        .metadata-item {
+            display: grid;
+            gap: 0.3rem;
+            padding: 0.75rem;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            background: rgba(7, 8, 10, 0.42);
+        }
+
+        .metadata-key {
+            color: var(--text-muted);
+            font-size: 0.74rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .metadata-value {
+            color: var(--text-primary);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.78rem;
+            word-break: break-word;
+        }
+
+        .detail-modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.72);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 200;
+            padding: 24px;
+        }
+
+        .detail-modal.open { display: flex; }
+
+        .detail-dialog {
+            width: min(1040px, 100%);
+            max-height: 88vh;
+            overflow: auto;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-color);
+            border-radius: 18px;
+            padding: 20px;
+            box-shadow: var(--shadow-lg);
+        }
+
+        .detail-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+            margin-bottom: 16px;
+            position: sticky;
+            top: -20px;
+            z-index: 5;
+            padding-bottom: 12px;
+            background: linear-gradient(var(--bg-surface) 82%, rgba(19, 21, 26, 0));
+        }
+
+        .detail-title-row { display: grid; gap: 0.35rem; min-width: 0; }
+        .detail-title { font-size: 1.08rem; font-weight: 800; }
+        .detail-close {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 28px;
+            line-height: 1;
+            border-radius: 8px;
+            padding: 0 0.3rem;
+        }
+
+        .detail-close:hover { color: #fff; background: rgba(255,255,255,0.05); }
+
+        .detail-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.55rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .detail-sections { display: grid; gap: 16px; }
+
+        .detail-block {
+            background-color: rgba(15, 17, 26, 0.58);
+            border: 1px solid rgba(46, 52, 77, 0.58);
+            border-radius: 12px;
+            padding: 14px;
+        }
+
+        .label {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            margin-bottom: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            font-weight: 700;
+        }
+
+        .detail-text {
+            color: var(--text-primary);
+            line-height: 1.68;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .detail-empty { color: var(--text-muted); line-height: 1.6; }
+
+        .file-list { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+
+        .file-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            max-width: 100%;
+            padding: 0.45rem 0.65rem;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+            background: rgba(255, 255, 255, 0.035);
+            text-decoration: none;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.78rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .file-chip:hover {
+            border-color: rgba(139, 92, 246, 0.55);
+            background: rgba(139, 92, 246, 0.08);
+        }
+
+        .detail-gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 14px;
+        }
+
+        .detail-image-card {
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            overflow: hidden;
+            background: #07080a;
+        }
+
+        .detail-image-link { display: block; background: #07080a; }
+
+        .detail-image {
+            display: block;
+            width: 100%;
+            max-height: 560px;
+            object-fit: contain;
+            background: #07080a;
+        }
+
+        .detail-video {
+            display: block;
+            width: 100%;
+            max-height: 620px;
+            border-radius: 12px;
+            background: #050608;
+        }
+
+        .image-card-meta {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+            padding: 0.75rem;
+            border-top: 1px solid var(--border-color);
+            background: rgba(19, 21, 26, 0.78);
+        }
+
+        .image-card-name {
+            display: grid;
+            gap: 0.25rem;
+            min-width: 0;
+        }
+
+        .image-card-index { font-size: 0.76rem; color: var(--text-secondary); font-weight: 700; }
+        .image-card-path {
+            color: var(--text-muted);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.72rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .image-card-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.45rem; flex: 0 0 auto; }
+
+        .detail-code-list { display: grid; gap: 0.65rem; }
+        .detail-code-item { display: grid; gap: 0.6rem; }
+
+        .detail-code-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+            padding: 0.75rem;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            background: rgba(7, 8, 10, 0.72);
+        }
+
+        .detail-code-name {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.82rem;
+        }
+
+        .detail-code-actions {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            flex: 0 0 auto;
+        }
+
+        .detail-file-content {
+            max-height: 520px;
+            overflow: auto;
+            padding: 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            background: #07080a;
+            color: #d7dde8;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.78rem;
+            line-height: 1.55;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .toast {
+            position: fixed;
+            right: 24px;
+            bottom: 24px;
+            z-index: 300;
+            transform: translateY(16px);
+            opacity: 0;
+            pointer-events: none;
+            min-width: 220px;
+            max-width: min(380px, calc(100vw - 48px));
+            padding: 0.75rem 0.95rem;
+            border: 1px solid rgba(52, 211, 153, 0.35);
+            border-radius: 12px;
+            background: rgba(10, 13, 18, 0.94);
+            color: var(--text-primary);
+            box-shadow: var(--shadow-lg);
+            transition: opacity 0.2s ease, transform 0.2s ease;
+        }
+
+        .toast.show { opacity: 1; transform: translateY(0); }
+        .toast.error { border-color: rgba(248, 113, 113, 0.45); }
+
+        @media (max-width: 768px) {
+            header { flex-direction: column; align-items: stretch; padding: 1rem; }
+            .header-actions { flex-direction: row; }
+            .search-wrapper, .search-input { flex: 1; width: 100% !important; }
+            main { padding: 1rem; }
+            .toolbar { flex-direction: column; align-items: flex-start; }
+            .grid { grid-template-columns: 1fr; }
+            .detail-modal { padding: 12px; align-items: stretch; }
+            .detail-dialog { max-height: calc(100vh - 24px); }
+            .detail-code-row, .image-card-meta { flex-direction: column; align-items: stretch; }
+            .detail-code-actions, .image-card-actions { justify-content: flex-start; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="brand">
+            <div class="brand-logo"><i data-lucide="terminal" size="16"></i></div>
+            <h1 class="brand-title">Codex Gemini Agent <span>/ History Dashboard</span></h1>
+        </div>
+        <div class="header-actions">
+            <div class="search-wrapper">
+                <i data-lucide="search" size="16"></i>
+                <input type="text" id="searchInput" class="search-input" placeholder="搜索任务、Prompt 或文件路径...">
+            </div>
+            <button id="refreshBtn" class="btn-refresh" type="button">
+                <i data-lucide="refresh-cw" size="14" id="refreshIcon"></i>
+                <span>刷新</span>
+            </button>
+        </div>
+    </header>
+
+    <main>
+        <div class="toolbar">
+            <div class="tabs" id="filterTabs">
+                <button class="tab active" type="button" data-type="all">全部</button>
+                <button class="tab" type="button" data-type="ask">文字</button>
+                <button class="tab" type="button" data-type="code">代码</button>
+                <button class="tab" type="button" data-type="image">图片</button>
+                <button class="tab" type="button" data-type="video">视频</button>
+            </div>
+            <div class="stats-badge">共找到 <span id="itemCount" style="color: var(--text-primary); font-weight: 700;">0</span> 条生成记录</div>
+        </div>
+
+        <div class="state-panel" id="loadingState">
+            <div class="spinner" aria-hidden="true"></div>
+            <strong>正在加载历史记录</strong>
+            <p>正在从本地 Gemini Bridge 读取任务历史...</p>
+        </div>
+
+        <div class="state-panel error" id="errorState">
+            <i data-lucide="triangle-alert" size="38"></i>
+            <strong>历史记录加载失败</strong>
+            <p id="errorMessage">请确认 Gemini Bridge 正在运行。</p>
+            <button class="soft-btn primary" type="button" id="retryLoadBtn">
+                <i data-lucide="rotate-ccw" size="14"></i>重新加载
+            </button>
+        </div>
+
+        <div class="grid" id="historyGrid"></div>
+
+        <div class="empty-state" id="emptyState">
+            <i data-lucide="folder-open" size="48"></i>
+            <p>没有找到匹配的历史记录</p>
+        </div>
+    </main>
+
+    <div class="detail-modal" id="detailModal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="detailTitle">
+        <div class="detail-dialog">
+            <div class="detail-header">
+                <div class="detail-title-row">
+                    <div class="task-id" id="detailTaskId"></div>
+                    <div class="detail-title" id="detailTitle">任务详情</div>
+                </div>
+                <button class="detail-close" id="detailClose" type="button" aria-label="关闭详情">&times;</button>
+            </div>
+            <div class="detail-sections" id="detailBody"></div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <script>
+        let currentTypeFilter = 'all';
+        let currentSearchQuery = '';
+        let historyData = [];
+        let toastTimer = null;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            refreshIcons();
+            initEventBindings();
+            loadDashboardData();
+        });
+
+        function refreshIcons() {
+            if (window.lucide && typeof window.lucide.createIcons === 'function') {
+                window.lucide.createIcons();
+            }
+        }
+
+        async function loadDashboardData() {
+            setLoadingState(true);
+            setErrorState('');
+            try {
+                const response = await fetch('/history');
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const payload = await response.json();
+                historyData = Array.isArray(payload) ? payload : (payload.tasks || []);
+                renderGrid();
+            } catch (error) {
+                console.error('历史数据加载失败', error);
+                historyData = [];
+                renderGrid();
+                setErrorState(`历史加载失败：${error.message}`);
+                showToast(`历史加载失败：${error.message}`, 'error');
+            } finally {
+                setLoadingState(false);
+            }
+        }
+
+        function setLoadingState(isLoading) {
+            const loadingState = document.getElementById('loadingState');
+            const grid = document.getElementById('historyGrid');
+            const emptyState = document.getElementById('emptyState');
+            if (!loadingState || !grid || !emptyState) return;
+            loadingState.style.display = isLoading ? 'flex' : 'none';
+            if (isLoading) {
+                grid.style.display = 'none';
+                emptyState.style.display = 'none';
+            }
+        }
+
+        function setErrorState(message) {
+            const errorState = document.getElementById('errorState');
+            const errorMessage = document.getElementById('errorMessage');
+            if (!errorState || !errorMessage) return;
+            errorState.style.display = message ? 'flex' : 'none';
+            if (message) errorMessage.textContent = message;
+            refreshIcons();
+        }
+
+        function toArtifactHref(filePath) {
+            const normalized = String(filePath || '').replaceAll('\\', '/');
+            const relative = normalized.replace(/^\/+/, '');
+            return `/artifact/${relative}`;
+        }
+
+        function escapeHtml(text) {
+            return String(text || '')
+                .replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;')
+                .replaceAll('"', '&quot;')
+                .replaceAll("'", '&#39;');
+        }
+
+        function formatTaskTime(task) {
+            const raw = task.updatedAt || task.createdAt || '';
+            const date = new Date(raw);
+            if (Number.isNaN(date.getTime())) return raw;
+            return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+        }
+
+        function statusClass(status) {
+            const normalized = String(status || '').toLowerCase();
+            if (normalized === 'completed' || normalized === 'success') return 'success';
+            if (normalized === 'running' || normalized === 'queued' || normalized === 'in_progress' || normalized === 'pending') return 'running';
+            return 'failed';
+        }
+
+        function typeIcon(type) {
+            if (type === 'code') return 'code-2';
+            if (type === 'image') return 'image';
+            if (type === 'video') return 'clapperboard';
+            return 'message-square-text';
+        }
+
+        function typeLabel(type) {
+            if (type === 'code') return '代码';
+            if (type === 'image') return '图片';
+            if (type === 'video') return '视频';
+            return '文字';
+        }
+
+        function allFiles(item) {
+            return Array.isArray(item.files) ? item.files : [];
+        }
+
+        function imageFiles(files) {
+            return files.filter((file) => /\.(png|jpg|jpeg|webp|gif)$/i.test(file));
+        }
+
+        function videoFiles(files) {
+            return files.filter((file) => /\.(mp4|webm|mov)$/i.test(file));
+        }
+
+        function codeFiles(files) {
+            return files.filter((file) => /\.(js|jsx|ts|tsx|py|md|html|json|css|java|go|rs|php|rb|cs|cpp|c|xml|yaml|yml|sql|sh|bat|ps1)$/i.test(file));
+        }
+
+        function previewHTML(item) {
+            const files = allFiles(item);
+            const media = Array.isArray(item.media) ? item.media : [];
+            const images = imageFiles(files);
+            const videos = videoFiles(files);
+            const codeFile = codeFiles(files)[0];
+
+            if (item.type === 'image' && images.length > 0) {
+                return `
+                    <div class="preview-area">
+                        <img src="${escapeHtml(toArtifactHref(images[0]))}" class="preview-image" alt="生成图片预览" loading="lazy">
+                        ${images.length > 1 ? `<div class="image-count-badge"><i data-lucide="images" size="13"></i>${images.length} 张</div>` : ''}
+                    </div>
+                `;
+            }
+
+            if (item.type === 'video') {
+                if (videos.length > 0) {
+                    return `
+                    <div class="preview-area">
+                        <video class="preview-video" src="${escapeHtml(toArtifactHref(videos[0]))}" controls preload="metadata" playsinline></video>
+                    </div>
+                `;
+                }
+                const videoLink = media.find((entry) => entry.kind === 'video' && entry.url);
+                return `
+                    <div class="preview-area">
+                        <div class="preview-video-placeholder">
+                            <i data-lucide="play-circle" size="28" style="color: var(--accent-orange)"></i>
+                            <span>${videoLink ? '视频已生成，可在详情中打开' : '视频任务记录'}</span>
+                        </div>
+                    </div>
+                `;
+            }
+
+            if (item.type === 'code' && codeFile) {
+                return `
+                    <div class="preview-area">
+                        <pre class="preview-code"><code>${escapeHtml(codeFile)}</code></pre>
+                    </div>
+                `;
+            }
+
+            return '';
+        }
+
+        function fileSummary(item) {
+            const files = allFiles(item);
+            if (files.length > 1) return `${files.length} 个文件`;
+            if (files.length === 1) return files[0];
+            if (item.type === 'ask') return '文字结果';
+            if (item.type === 'image') return '暂无本地图片文件';
+            if (item.type === 'code') return '暂无本地代码文件';
+            if (item.type === 'video') return '暂无本地视频文件';
+            return '无本地文件';
+        }
+
+        function footerHTML(item) {
+            const files = allFiles(item);
+            const primary = files[0] || '';
+            const label = fileSummary(item);
+            const fileLink = primary
+                ? `<a class="file-link" href="${escapeHtml(toArtifactHref(primary))}" target="_blank" rel="noreferrer">${escapeHtml(label)}</a>`
+                : `<span>${escapeHtml(label)}</span>`;
+
+            return `
+                <div class="card-footer">
+                    <div class="file-path" title="${escapeHtml(primary || label)}">
+                        <i data-lucide="${files.length > 1 ? 'folder-open' : 'folder'}" size="12"></i>
+                        ${fileLink}
+                    </div>
+                    <button class="icon-btn" type="button" title="复制 Prompt" data-copy-prompt="${escapeHtml(item.prompt || '')}">
+                        <i data-lucide="copy" size="14"></i>
+                    </button>
+                    <button class="icon-btn" type="button" title="删除记录" data-delete-task="${escapeHtml(item.taskId || '')}">
+                        <i data-lucide="trash-2" size="14"></i>
+                    </button>
+                </div>
+            `;
+        }
+
+        function renderGrid() {
+            const grid = document.getElementById('historyGrid');
+            const emptyState = document.getElementById('emptyState');
+
+            const filteredData = historyData.filter((item) => {
+                const matchesType = currentTypeFilter === 'all' || item.type === currentTypeFilter;
+                const prompt = String(item.prompt || '').toLowerCase();
+                const taskId = String(item.taskId || '').toLowerCase();
+                const fileText = allFiles(item).join(' ').toLowerCase();
+                const text = String(item.text || item.resultText || '').toLowerCase();
+                const query = currentSearchQuery.toLowerCase();
+                const matchesSearch = !query || prompt.includes(query) || taskId.includes(query) || fileText.includes(query) || text.includes(query);
+                return matchesType && matchesSearch;
+            });
+
+            document.getElementById('itemCount').innerText = filteredData.length;
+
+            const hasError = document.getElementById('errorState')?.style.display === 'flex';
+            if (hasError) {
+                grid.style.display = 'none';
+                emptyState.style.display = 'none';
+                return;
+            }
+
+            if (filteredData.length === 0) {
+                grid.style.display = 'none';
+                emptyState.style.display = 'flex';
+                refreshIcons();
+                return;
+            }
+
+            grid.style.display = 'grid';
+            emptyState.style.display = 'none';
+            grid.innerHTML = filteredData.map((item) => `
+                <article class="card" data-id="${escapeHtml(item.taskId || '')}" tabindex="0" aria-label="打开 ${escapeHtml(item.taskId || '')} 详情">
+                    <div class="card-header">
+                        <div class="task-meta">
+                            <span class="task-id">${escapeHtml(item.taskId || '')}</span>
+                            <span class="task-time">${escapeHtml(formatTaskTime(item))}</span>
+                        </div>
+                        <span class="badge ${statusClass(item.status)}">${escapeHtml(item.status || '')}</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="prompt-container">
+                            <div class="type-icon ${escapeHtml(item.type || '')}">
+                                <i data-lucide="${typeIcon(item.type)}" size="16"></i>
+                            </div>
+                            <p class="prompt-text" title="${escapeHtml(item.prompt || '')}">${escapeHtml(item.prompt || '')}</p>
+                        </div>
+                        ${previewHTML(item)}
+                    </div>
+                    ${footerHTML(item)}
+                </article>
+            `).join('');
+
+            refreshIcons();
+            bindCardActions();
+        }
+
+        function bindCardActions() {
+            document.querySelectorAll('[data-copy-prompt]').forEach((button) => {
+                button.addEventListener('click', async (event) => {
+                    event.stopPropagation();
+                    await copyText(button.getAttribute('data-copy-prompt') || '', 'Prompt 已复制');
+                });
+            });
+
+            document.querySelectorAll('[data-delete-task]').forEach((button) => {
+                button.addEventListener('click', async (event) => {
+                    event.stopPropagation();
+                    await deleteTaskHistory(button.getAttribute('data-delete-task') || '');
+                });
+            });
+
+            document.querySelectorAll('.card').forEach((card) => {
+                card.addEventListener('click', (event) => {
+                    if (event.target.closest('video, a, button')) return;
+                    openTaskDetail(card.getAttribute('data-id'));
+                });
+                card.addEventListener('keydown', (event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        openTaskDetail(card.getAttribute('data-id'));
+                    }
+                });
+            });
+        }
+
+        function openTaskDetail(taskId) {
+            const task = historyData.find((item) => item.taskId === taskId);
+            if (!task) return;
+            document.getElementById('detailTaskId').textContent = task.taskId || '';
+            document.getElementById('detailTitle').textContent = `${typeLabel(task.type)} · ${task.status || 'unknown'}`;
+            document.getElementById('detailBody').innerHTML = buildDetailHtml(task);
+            bindDetailPreviewActions();
+            bindDetailCopyActions(task);
+            document.getElementById('detailModal').classList.add('open');
+            document.getElementById('detailModal').setAttribute('aria-hidden', 'false');
+            refreshIcons();
+        }
+
+        function closeTaskDetail() {
+            document.getElementById('detailModal').classList.remove('open');
+            document.getElementById('detailModal').setAttribute('aria-hidden', 'true');
+        }
+
+        function bindDetailPreviewActions() {
+            document.querySelectorAll('[data-preview-file]').forEach((button) => {
+                button.addEventListener('click', async () => {
+                    await loadArtifactPreview(button);
+                });
+            });
+        }
+
+        function bindDetailCopyActions(task) {
+            const detailBody = document.getElementById('detailBody');
+            detailBody.querySelectorAll('[data-copy-prompt]').forEach((button) => {
+                button.addEventListener('click', async () => {
+                    await copyText(button.getAttribute('data-copy-prompt') || task.prompt || '', 'Prompt 已复制');
+                });
+            });
+
+            detailBody.querySelectorAll('[data-copy-result]').forEach((button) => {
+                button.addEventListener('click', async () => {
+                    const result = button.getAttribute('data-copy-result') || '';
+                    await copyText(result, '结果已复制');
+                });
+            });
+
+            detailBody.querySelectorAll('[data-copy-path]').forEach((button) => {
+                button.addEventListener('click', async () => {
+                    await copyText(button.getAttribute('data-copy-path') || '', '文件路径已复制');
+                });
+            });
+
+            detailBody.querySelectorAll('[data-copy-all-paths]').forEach((button) => {
+                button.addEventListener('click', async () => {
+                    const paths = allFiles(task).join('\n');
+                    await copyText(paths, '全部路径已复制');
+                });
+            });
+
+            detailBody.querySelectorAll('[data-copy-file]').forEach((button) => {
+                button.addEventListener('click', async () => {
+                    await copyArtifactFile(button);
+                });
+            });
+
+            detailBody.querySelectorAll('[data-delete-task]').forEach((button) => {
+                button.addEventListener('click', async () => {
+                    await deleteTaskHistory(button.getAttribute('data-delete-task') || task.taskId || '');
+                });
+            });
+        }
+
+        async function deleteTaskHistory(taskId) {
+            if (!taskId) return;
+            if (!confirm(`确定删除记录 ${taskId} 吗？文件会保留在本地输出目录。`)) return;
+
+            try {
+                const response = await fetch(`/history/${encodeURIComponent(taskId)}`, { method: 'DELETE' });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                historyData = historyData.filter((item) => item.taskId !== taskId);
+                closeTaskDetail();
+                renderGrid();
+                updateStats();
+                showToast('记录已删除');
+            } catch (error) {
+                showToast(`删除失败：${error.message}`, 'error');
+            }
+        }
+
+        async function loadArtifactPreview(button) {
+            const file = button.getAttribute('data-preview-file') || '';
+            const targetId = button.getAttribute('data-preview-target') || '';
+            const target = document.getElementById(targetId);
+            if (!file || !target) return;
+
+            if (button.dataset.loaded === 'true') {
+                target.hidden = !target.hidden;
+                button.innerHTML = target.hidden ? '<i data-lucide="eye" size="14"></i>查看全文' : '<i data-lucide="chevron-up" size="14"></i>收起';
+                refreshIcons();
+                return;
+            }
+
+            button.disabled = true;
+            button.textContent = '加载中...';
+            try {
+                const content = await fetchArtifactText(file);
+                target.textContent = content;
+                target.hidden = false;
+                button.dataset.loaded = 'true';
+                button.innerHTML = '<i data-lucide="chevron-up" size="14"></i>收起';
+            } catch (error) {
+                target.textContent = `读取失败：${error.message}`;
+                target.hidden = false;
+                button.innerHTML = '<i data-lucide="rotate-ccw" size="14"></i>重试';
+                showToast(`读取失败：${error.message}`, 'error');
+            } finally {
+                button.disabled = false;
+                refreshIcons();
+            }
+        }
+
+        async function copyArtifactFile(button) {
+            const file = button.getAttribute('data-copy-file') || '';
+            if (!file) return;
+            button.disabled = true;
+            const oldHtml = button.innerHTML;
+            button.textContent = '复制中...';
+            try {
+                const content = await fetchArtifactText(file);
+                await copyText(content, '代码全文已复制');
+            } catch (error) {
+                showToast(`复制失败：${error.message}`, 'error');
+            } finally {
+                button.disabled = false;
+                button.innerHTML = oldHtml;
+                refreshIcons();
+            }
+        }
+
+        async function fetchArtifactText(file) {
+            const response = await fetch(toArtifactHref(file));
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return response.text();
+        }
+
+        async function copyText(text, successMessage = '已复制') {
+            const value = String(text || '');
+            if (!value) {
+                showToast('没有可复制的内容', 'error');
+                return false;
+            }
+
+            try {
+                if (navigator.clipboard && window.isSecureContext) {
+                    await navigator.clipboard.writeText(value);
+                } else {
+                    const textarea = document.createElement('textarea');
+                    textarea.value = value;
+                    textarea.setAttribute('readonly', '');
+                    textarea.style.position = 'fixed';
+                    textarea.style.left = '-9999px';
+                    document.body.appendChild(textarea);
+                    textarea.select();
+                    document.execCommand('copy');
+                    textarea.remove();
+                }
+                showToast(successMessage);
+                return true;
+            } catch (error) {
+                showToast(`复制失败：${error.message}`, 'error');
+                return false;
+            }
+        }
+
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            if (!toast) return;
+            clearTimeout(toastTimer);
+            toast.textContent = message;
+            toast.classList.toggle('error', type === 'error');
+            toast.classList.add('show');
+            toastTimer = setTimeout(() => {
+                toast.classList.remove('show');
+            }, 2200);
+        }
+
+        function previewIdForFile(file, index) {
+            return `artifact-preview-${index}-${String(file).replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+        }
+
+        function buildDetailHtml(task) {
+            if (task.type === 'image') return buildImageDetailHtml(task);
+            if (task.type === 'code') return buildCodeDetailHtml(task);
+            if (task.type === 'video') return buildVideoDetailHtml(task);
+            return buildAskDetailHtml(task);
+        }
+
+        function buildAskDetailHtml(task) {
+            const answer = task.text || task.resultText || '';
+            const answerBody = answer
+                ? `<div class="detail-actions"><button class="soft-btn primary" type="button" data-copy-result="${escapeHtml(answer)}"><i data-lucide="copy" size="14"></i>复制结果</button></div><div class="detail-text">${escapeHtml(answer)}</div>`
+                : '<div class="detail-empty">这条历史记录没有保存文字结果。后续文字任务会直接显示在这里。</div>';
+
+            return [
+                detailBlock('文字结果', answerBody),
+                promptBlock(task),
+                metadataBlock(task),
+                filesBlock(task),
+                dangerActionsBlock(task),
+                errorBlock(task),
+            ].filter(Boolean).join('');
+        }
+
+        function buildCodeDetailHtml(task) {
+            const files = codeFiles(allFiles(task));
+            const rows = files.length > 0
+                ? `<div class="detail-code-list">${files.map((file, index) => {
+                    const previewId = previewIdForFile(file, index);
+                    return `
+                    <div class="detail-code-item">
+                        <div class="detail-code-row">
+                            <div class="detail-code-name" title="${escapeHtml(file)}">${escapeHtml(file)}</div>
+                            <div class="detail-code-actions">
+                                <button class="soft-btn" type="button" data-preview-file="${escapeHtml(file)}" data-preview-target="${escapeHtml(previewId)}"><i data-lucide="eye" size="14"></i>查看全文</button>
+                                <button class="soft-btn primary" type="button" data-copy-file="${escapeHtml(file)}"><i data-lucide="copy" size="14"></i>复制全文</button>
+                                <a class="soft-btn" href="${escapeHtml(toArtifactHref(file))}" target="_blank" rel="noreferrer"><i data-lucide="external-link" size="14"></i>新窗口</a>
+                            </div>
+                        </div>
+                        <pre class="detail-file-content" id="${escapeHtml(previewId)}" hidden></pre>
+                    </div>
+                `;
+                }).join('')}</div>`
+                : '<div class="detail-empty">这条记录没有本地代码文件。</div>';
+
+            return [
+                detailBlock('代码文件', rows),
+                promptBlock(task),
+                metadataBlock(task),
+                filesBlock(task),
+                dangerActionsBlock(task),
+                errorBlock(task),
+            ].filter(Boolean).join('');
+        }
+
+        function buildImageDetailHtml(task) {
+            const files = imageFiles(allFiles(task));
+            const gallery = files.length > 0
+                ? `<div class="detail-gallery">${files.map((file, index) => `
+                    <div class="detail-image-card">
+                        <a class="detail-image-link" href="${escapeHtml(toArtifactHref(file))}" target="_blank" rel="noreferrer" title="${escapeHtml(file)}">
+                            <img class="detail-image" src="${escapeHtml(toArtifactHref(file))}" alt="${escapeHtml(file)}" loading="lazy">
+                        </a>
+                        <div class="image-card-meta">
+                            <div class="image-card-name">
+                                <span class="image-card-index">第 ${index + 1} / ${files.length} 张</span>
+                                <span class="image-card-path" title="${escapeHtml(file)}">${escapeHtml(file)}</span>
+                            </div>
+                            <div class="image-card-actions">
+                                <a class="soft-btn" href="${escapeHtml(toArtifactHref(file))}" target="_blank" rel="noreferrer"><i data-lucide="maximize-2" size="14"></i>打开原图</a>
+                                <a class="soft-btn" href="${escapeHtml(toArtifactHref(file))}" download><i data-lucide="download" size="14"></i>下载原图</a>
+                                <button class="soft-btn" type="button" data-copy-path="${escapeHtml(file)}"><i data-lucide="copy" size="14"></i>复制路径</button>
+                            </div>
+                        </div>
+                    </div>
+                `).join('')}</div>`
+                : '<div class="detail-empty">这条历史记录没有保存到本地图片文件。后面新生成的图片会显示在这里。</div>';
+
+            return [
+                detailBlock(`图片结果（${files.length} 张）`, gallery),
+                promptBlock(task),
+                metadataBlock(task),
+                filesBlock(task),
+                remoteMediaBlock(task, '远程图片'),
+                dangerActionsBlock(task),
+                errorBlock(task),
+            ].filter(Boolean).join('');
+        }
+
+        function buildVideoDetailHtml(task) {
+            const files = allFiles(task);
+            const localVideos = videoFiles(files);
+            const localLinks = localVideos.length > 0 ? renderFileChips(localVideos) : '';
+            const player = localVideos.length > 0 ? `
+                <div class="detail-video-wrap">
+                    <video class="detail-video" src="${escapeHtml(toArtifactHref(localVideos[0]))}" controls preload="metadata" playsinline></video>
+                </div>
+            ` : '';
+            const remoteLinks = remoteMediaLinks(task, '远程视频');
+            return [
+                detailBlock('视频预览', player || localLinks || remoteLinks || '<div class="detail-empty">没有可播放的视频文件。</div>'),
+                localLinks ? detailBlock('视频文件', localLinks) : '',
+                promptBlock(task),
+                metadataBlock(task),
+                filesBlock(task),
+                dangerActionsBlock(task),
+                errorBlock(task),
+            ].filter(Boolean).join('');
+        }
+        function promptBlock(task) {
+            const prompt = task.prompt || '';
+            return detailBlock('生成要求', `
+                <div class="detail-actions">
+                    <button class="soft-btn" type="button" data-copy-prompt="${escapeHtml(prompt)}"><i data-lucide="copy" size="14"></i>复制 Prompt</button>
+                </div>
+                <div class="detail-text">${escapeHtml(prompt)}</div>
+            `);
+        }
+
+        function metadataBlock(task) {
+            const rows = [
+                ['任务 ID', task.taskId || ''],
+                ['类型', typeLabel(task.type)],
+                ['状态', task.status || 'unknown'],
+                ['创建时间', formatTaskTime({ createdAt: task.createdAt })],
+                ['更新时间', formatTaskTime({ updatedAt: task.updatedAt })],
+            ];
+
+            return detailBlock('任务信息', `
+                <div class="metadata-grid">
+                    ${rows.map(([key, value]) => `
+                        <div class="metadata-item">
+                            <span class="metadata-key">${escapeHtml(key)}</span>
+                            <span class="metadata-value">${escapeHtml(value || '-')}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            `);
+        }
+
+        function dangerActionsBlock(task) {
+            return detailBlock('记录操作', `
+                <div class="detail-actions">
+                    <button class="soft-btn" type="button" data-delete-task="${escapeHtml(task.taskId || '')}"><i data-lucide="trash-2" size="14"></i>删除记录</button>
+                </div>
+                <div class="detail-empty">只删除面板历史记录，不删除本地文件。</div>
+            `);
+        }
+
+        function filesBlock(task) {
+            const files = allFiles(task);
+            if (files.length === 0) {
+                return detailBlock('本地文件', '<div class="detail-empty">这条记录没有本地文件。</div>');
+            }
+
+            return detailBlock('本地文件', `
+                <div class="detail-actions">
+                    <button class="soft-btn primary" type="button" data-copy-all-paths="true"><i data-lucide="copy" size="14"></i>复制全部路径</button>
+                </div>
+                ${renderFileChips(files)}
+            `);
+        }
+
+        function errorBlock(task) {
+            if (!task.error) return '';
+            return detailBlock('错误信息', `<div class="detail-text" style="color: var(--danger);">${escapeHtml(task.error)}</div>`);
+        }
+
+        function remoteMediaBlock(task, label) {
+            const links = remoteMediaLinks(task, label);
+            return links ? detailBlock(label, links) : '';
+        }
+
+        function remoteMediaLinks(task, label) {
+            const media = Array.isArray(task.media) ? task.media : [];
+            const links = media.filter((item) => item && item.url).map((item, index) => {
+                const linkLabel = `${label || '远程媒体'} ${index + 1}`;
+                return `<a class="file-chip" href="${escapeHtml(item.url)}" target="_blank" rel="noreferrer"><i data-lucide="external-link" size="13"></i>${escapeHtml(linkLabel)}</a>`;
+            });
+            return links.length > 0 ? `<div class="file-list">${links.join('')}</div>` : '';
+        }
+
+        function renderFileChips(files) {
+            return `<div class="file-list">${files.map((file) => `
+                <a class="file-chip" href="${escapeHtml(toArtifactHref(file))}" target="_blank" rel="noreferrer"><i data-lucide="file" size="13"></i>${escapeHtml(file)}</a>
+            `).join('')}</div>`;
+        }
+
+        function detailBlock(label, body) {
+            return `
+                <section class="detail-block">
+                    <div class="label">${escapeHtml(label)}</div>
+                    ${body}
+                </section>
+            `;
+        }
+
+        function initEventBindings() {
+            const tabsContainer = document.getElementById('filterTabs');
+            tabsContainer.addEventListener('click', (event) => {
+                if (!event.target.classList.contains('tab')) return;
+                tabsContainer.querySelectorAll('.tab').forEach((tab) => tab.classList.remove('active'));
+                event.target.classList.add('active');
+                currentTypeFilter = event.target.getAttribute('data-type') || 'all';
+                renderGrid();
+            });
+
+            const searchInput = document.getElementById('searchInput');
+            let debounceTimer;
+            searchInput.addEventListener('input', (event) => {
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(() => {
+                    currentSearchQuery = event.target.value.trim();
+                    renderGrid();
+                }, 150);
+            });
+
+            const refreshBtn = document.getElementById('refreshBtn');
+            const refreshIcon = document.getElementById('refreshIcon');
+            refreshBtn.addEventListener('click', async () => {
+                refreshIcon.style.transition = 'transform 0.6s ease';
+                refreshIcon.style.transform = 'rotate(360deg)';
+                await loadDashboardData();
+                setTimeout(() => {
+                    refreshIcon.style.transition = 'none';
+                    refreshIcon.style.transform = 'rotate(0deg)';
+                }, 600);
+            });
+
+            document.getElementById('detailClose').addEventListener('click', closeTaskDetail);
+            document.getElementById('detailModal').addEventListener('click', (event) => {
+                if (event.target.id === 'detailModal') closeTaskDetail();
+            });
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape') closeTaskDetail();
+            });
+        }
+    </script>
+</body>
+</html>

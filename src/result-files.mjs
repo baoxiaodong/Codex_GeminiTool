@@ -4,9 +4,9 @@ import { resolveOutputPath } from './output-paths.mjs';
 
 export async function saveCodeResultFiles(root, taskId, result) {
   const files = [];
-  const text = typeof result?.text === 'string' ? result.text.trim() : '';
+  const text = usableResultText(result?.text);
   const codeBlocks = Array.isArray(result?.codeBlocks)
-    ? result.codeBlocks.filter((block) => typeof block === 'string' && block.trim())
+    ? deduplicateCodeBlocks(result.codeBlocks.filter((block) => typeof block === 'string' && block.trim()))
     : [];
 
   if (!text && codeBlocks.length === 0) {
@@ -22,6 +22,8 @@ export async function saveCodeResultFiles(root, taskId, result) {
       mimeType: 'text/markdown',
       path: outputPath,
     });
+
+    return files;
   }
 
   for (const [index, block] of codeBlocks.entries()) {
@@ -37,6 +39,34 @@ export async function saveCodeResultFiles(root, taskId, result) {
   }
 
   return files;
+}
+
+function deduplicateCodeBlocks(blocks) {
+  const seen = new Set();
+  const unique = [];
+
+  for (const block of blocks) {
+    const key = canonicalCodeBlock(block);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(block);
+  }
+
+  return unique;
+}
+
+function canonicalCodeBlock(block) {
+  return String(block || '')
+    .trim()
+    .replace(/^(xml|html|yaml|yml|java|javascript|js|jsx|typescript|ts|tsx|python|py|sql|json|bash|shell|sh|css|markdown|md)\s*\r?\n/i, '')
+    .trim()
+    .replace(/\r\n/g, '\n');
+}
+
+function usableResultText(value) {
+  const text = typeof value === 'string' ? value.trim() : '';
+  if (/^Gemini\s*(说|says)?\s*$/i.test(text)) return '';
+  return text;
 }
 
 async function writeTextFile(outputPath, text) {

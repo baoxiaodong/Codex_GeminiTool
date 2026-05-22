@@ -13,6 +13,14 @@ test('creates queued tasks with stable ids and timestamps', () => {
   assert.equal(store.getTask(task.id).prompt, 'hello');
 });
 
+test('continues task ids from an existing sequence', () => {
+  const store = createTaskStore({ initialSequence: 6 });
+
+  const task = store.createTask({ type: 'ask', prompt: 'hello again' });
+
+  assert.equal(task.id, 'task-000007');
+});
+
 test('claims queued tasks once and marks them in progress', () => {
   const store = createTaskStore();
   const first = store.createTask({ type: 'image', prompt: 'make a poster' });

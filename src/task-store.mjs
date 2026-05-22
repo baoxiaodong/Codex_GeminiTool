@@ -4,7 +4,7 @@ export function createTaskStore(options = {}) {
   const now = options.now ?? (() => new Date());
   const tasks = new Map();
   const events = new EventEmitter();
-  let sequence = 0;
+  let sequence = Math.max(0, Math.floor(Number(options.initialSequence ?? 0)));
 
   function timestamp() {
     return now().toISOString();
@@ -42,20 +42,35 @@ export function createTaskStore(options = {}) {
 
     for (const task of tasks.values()) {
       if (task.status === 'queued') {
-        task.status = 'in_progress';
-        task.claimedAt = timestamp();
-        task.heartbeatAt = task.claimedAt;
-        task.updatedAt = task.claimedAt;
-        events.emit('updated', cloneTask(task));
-        return cloneTask(task);
+        return startTask(task.id);
       }
     }
     return null;
   }
 
+  function startTask(id) {
+    const task = requireTask(tasks, id);
+    if (task.status !== 'queued') {
+      return cloneTask(task);
+    }
+
+    task.status = 'in_progress';
+    task.claimedAt = timestamp();
+    task.heartbeatAt = task.claimedAt;
+    task.updatedAt = task.claimedAt;
+    events.emit('updated', cloneTask(task));
+    return cloneTask(task);
+  }
+
   function getTask(id) {
     const task = tasks.get(id);
     return task ? cloneTask(task) : null;
+  }
+
+  function deleteTask(id) {
+    const deleted = tasks.delete(id);
+    if (deleted) events.emit('updated', { id, status: 'deleted' });
+    return deleted;
   }
 
   function listTasks() {
@@ -176,7 +191,9 @@ export function createTaskStore(options = {}) {
   return {
     createTask,
     claimNextTask,
+    startTask,
     getTask,
+    deleteTask,
     listTasks,
     completeTask,
     failTask,

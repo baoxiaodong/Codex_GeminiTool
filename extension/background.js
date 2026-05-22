@@ -1,4 +1,6 @@
 const BRIDGE_HEALTH_URL = 'http://127.0.0.1:8765/health';
+const BRIDGE_HISTORY_URL = 'http://127.0.0.1:8765/history';
+import { buttonLooksLikeStop, submissionLooksSuccessful } from './submit-state.js';
 
 chrome.runtime.onInstalled.addListener(() => {
   console.log('Gemini Web Bridge service worker installed');
@@ -14,6 +16,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         mode: 'Gemini page polling',
         error: error.message,
       }));
+    return true;
+  }
+
+  if (message?.type === 'popup_history') {
+    getBridgeHistory()
+      .then((history) => sendResponse(history))
+      .catch((error) => sendResponse({ tasks: [], error: error.message }));
     return true;
   }
 
@@ -92,28 +101,45 @@ async function submitPromptWithDebugger(tabId, text) {
       throw new Error(`Could not find send button: ${JSON.stringify(prepared)}`);
     }
 
-    const { x, y } = prepared.buttonRect;
-    await sendDebuggerCommand(target, 'Input.dispatchMouseEvent', {
-      type: 'mouseMoved',
-      x,
-      y,
-    });
-    await sendDebuggerCommand(target, 'Input.dispatchMouseEvent', {
-      type: 'mousePressed',
-      x,
-      y,
-      button: 'left',
-      clickCount: 1,
-    });
-    await sendDebuggerCommand(target, 'Input.dispatchMouseEvent', {
-      type: 'mouseReleased',
-      x,
-      y,
-      button: 'left',
-      clickCount: 1,
-    });
+    let checked = null;
 
-    const checked = await evaluateInPage(target, checkPromptSubmissionInPage, text);
+    await clickButtonRect(target, prepared.buttonRect);
+    checked = await evaluateInPage(target, checkPromptSubmissionInPage, text);
+
+    if (!submissionLooksSuccessful(checked)) {
+      await sendDebuggerCommand(target, 'Input.dispatchKeyEvent', {
+        type: 'keyDown',
+        windowsVirtualKeyCode: 13,
+        code: 'Enter',
+        key: 'Enter',
+      });
+      await sendDebuggerCommand(target, 'Input.dispatchKeyEvent', {
+        type: 'keyUp',
+        windowsVirtualKeyCode: 13,
+        code: 'Enter',
+        key: 'Enter',
+      });
+      checked = await evaluateInPage(target, checkPromptSubmissionInPage, text);
+    }
+
+    if (!submissionLooksSuccessful(checked)) {
+      await sendDebuggerCommand(target, 'Input.dispatchKeyEvent', {
+        type: 'keyDown',
+        windowsVirtualKeyCode: 13,
+        code: 'Enter',
+        key: 'Enter',
+        modifiers: 2,
+      });
+      await sendDebuggerCommand(target, 'Input.dispatchKeyEvent', {
+        type: 'keyUp',
+        windowsVirtualKeyCode: 13,
+        code: 'Enter',
+        key: 'Enter',
+        modifiers: 2,
+      });
+      checked = await evaluateInPage(target, checkPromptSubmissionInPage, text);
+    }
+
     return {
       ...prepared,
       ...checked,
@@ -122,6 +148,41 @@ async function submitPromptWithDebugger(tabId, text) {
   } finally {
     await detachDebugger(target);
   }
+}
+
+async function getBridgeHistory() {
+  const response = await fetch(BRIDGE_HISTORY_URL);
+  if (!response.ok) {
+    throw new Error(`Bridge history returned HTTP ${response.status}`);
+  }
+
+  const payload = await response.json();
+  return payload && typeof payload === 'object'
+    ? payload
+    : { tasks: [] };
+}
+
+async function clickButtonRect(target, rect) {
+  const { x, y } = rect;
+  await sendDebuggerCommand(target, 'Input.dispatchMouseEvent', {
+    type: 'mouseMoved',
+    x,
+    y,
+  });
+  await sendDebuggerCommand(target, 'Input.dispatchMouseEvent', {
+    type: 'mousePressed',
+    x,
+    y,
+    button: 'left',
+    clickCount: 1,
+  });
+  await sendDebuggerCommand(target, 'Input.dispatchMouseEvent', {
+    type: 'mouseReleased',
+    x,
+    y,
+    button: 'left',
+    clickCount: 1,
+  });
 }
 
 async function evaluateInPage(target, fn, ...args) {
@@ -310,6 +371,13 @@ async function preparePromptInPage(prompt) {
 async function checkPromptSubmissionInPage(prompt) {
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   const normalizeText = (text) => String(text || '').replace(/\u00a0/g, ' ').replace(/\s+\n/g, '\n').trim();
+  const looksLikeStop = (label) => {
+    const normalized = String(label || '').toLowerCase();
+    return normalized.includes('stop')
+      || normalized.includes('停止')
+      || normalized.includes('cancel')
+      || normalized.includes('取消');
+  };
   const findPromptInput = () => document.querySelector('div.ql-editor[contenteditable="true"][role="textbox"][aria-label*="Gemini"]')
     || document.querySelector('div[contenteditable="true"][role="textbox"][aria-label*="Gemini"]')
     || document.querySelector('div.ql-editor[contenteditable="true"][role="textbox"]')
@@ -323,10 +391,15 @@ async function checkPromptSubmissionInPage(prompt) {
   const input = findPromptInput();
   const inputText = normalizeText(input?.innerText || input?.textContent || input?.value || '');
   const promptNeedle = prompt.slice(0, 20);
+  const runningDetected = Array.from(document.querySelectorAll('button, [aria-label], mat-icon'))
+    .map((element) => `${element.getAttribute?.('aria-label') || ''} ${element.textContent || ''}`.toLowerCase())
+    .some((label) => looksLikeStop(label));
+  const inputContainsPrompt = inputText.includes(promptNeedle);
   return {
-    didSubmit: !inputText.includes(promptNeedle),
+    didSubmit: !inputContainsPrompt || runningDetected,
     afterInputTextLength: inputText.length,
     afterInputTextPreview: inputText.slice(0, 80),
+    runningDetected,
   };
 }
 

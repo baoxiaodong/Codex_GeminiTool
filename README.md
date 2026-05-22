@@ -13,8 +13,9 @@
 项目由三部分组成：
 
 - 本地桥接服务：默认监听 `http://127.0.0.1:8765`
-- Chrome 扩展：负责操作 `https://gemini.google.com/app`
+- 浏览器自动化执行器：使用独立 Chrome Profile 操作 `https://gemini.google.com/app`
 - MCP 服务：让 Codex 通过 MCP 工具或自然语言调用 Gemini
+- Chrome 扩展：保留为兼容路径，默认不再依赖它
 
 安装完成后，你可以在 Codex 中直接说：
 
@@ -26,6 +27,98 @@
 ```
 
 同时也兼容常见误拼：`用gimini...`。
+
+
+## 快速下载和使用（Windows）
+
+> 适合第一次安装：下载项目、安装依赖、启动面板、配置 Codex MCP。
+
+### 一键下载
+
+```powershell
+git clone https://github.com/baoxiaodong/Codex_GeminiTool.git F:\Codex_GeminiTool
+cd F:\Codex_GeminiTool
+npm install
+```
+
+### 启动可视化面板
+
+双击项目根目录的：
+
+```text
+open-panel.cmd
+```
+
+或在 PowerShell 中运行：
+
+```powershell
+cd F:\Codex_GeminiTool
+npm run panel
+```
+
+面板默认地址：
+
+```text
+http://127.0.0.1:9876/panel
+```
+
+面板会自动启动 9876 端口的桥接服务，适合手动查看历史任务、输出文件和删除记录。
+
+### 启动 Codex MCP 使用的桥接服务
+
+Codex MCP 默认连接 `http://127.0.0.1:8765`。如果你要在 Codex 里直接说“用gemini...”，请保持下面命令运行：
+
+```powershell
+cd F:\Codex_GeminiTool
+npm run bridge
+```
+
+### 首次登录 Gemini
+
+第一次让 Gemini 执行问答、写代码、生图或视频时，会打开一个独立 Chrome 自动化窗口。请在这个窗口中登录：
+
+```text
+https://gemini.google.com/app
+```
+
+登录成功后再回到 Codex 里重试即可。后续会复用这个专用浏览器 Profile。
+
+### 配置 Codex MCP
+
+把下面配置加入你的 Codex 配置文件，并按你的实际安装路径修改 `F:\Codex_GeminiTool`：
+
+```toml
+[mcp_servers.gemini-web-bridge]
+command = "node"
+args = ['F:\Codex_GeminiTool\src\mcp-server.mjs']
+cwd = 'F:\Codex_GeminiTool'
+startup_timeout_sec = 20
+```
+
+然后重启 Codex 或新开一个 Codex 会话。
+
+### 配置 Codex 技能触发词
+
+把仓库中的：
+
+```text
+F:\Codex_GeminiTool\.codex\skills\gemini-web-bridge\SKILL.md
+```
+
+复制到：
+
+```text
+C:\Users\<你的用户名>\.codex\skills\gemini-web-bridge\SKILL.md
+```
+
+之后你就可以在 Codex 里直接说：
+
+```text
+用gemini问：你好
+用gemini写代码：写一个 Agent + Function Calling 案例
+用gemini生图：生成一张雪碧海报
+用gemini生成视频：生成一个未来城市短视频
+```
 
 ## 功能特性
 
@@ -45,7 +138,7 @@
 - Windows
 - Google Chrome
 - Node.js 20 或更高版本
-- 已登录 Gemini 网页版账号
+- 已在自动化浏览器 Profile 中登录 Gemini 网页版账号
 - 已安装并启用 MCP 的 Codex
 
 ## 项目结构
@@ -96,14 +189,23 @@ cd Codex_GeminiTool
 npm install
 ```
 
-### 3. 加载 Chrome 扩展
+### 3. 初始化自动化浏览器登录
 
-1. 打开 `chrome://extensions`
-2. 开启右上角 `Developer mode`
-3. 点击 `Load unpacked`
-4. 选择本项目的 `extension` 目录
-5. 打开 <https://gemini.google.com/app>
-6. 确保 Gemini 页面已经登录
+首次执行 `gemini_run`、`gemini_image`、`gemini_code` 或 `gemini_video` 时，桥接服务会打开一个独立的 Chrome 自动化窗口。
+
+在这个窗口里登录 <https://gemini.google.com/app>，并手动确认你的账号可以正常问答、生图或生成视频。这个登录状态会保存在默认目录：
+
+```text
+C:\tmp\gemini-browser-profile
+```
+
+后续任务会复用这个专用 Profile，不会反复复制或关闭你的日常 Chrome 浏览器。
+
+如果你仍想使用旧的扩展方式，可以把对应环境变量设为 `extension`，例如：
+
+```powershell
+$env:GEMINI_BRIDGE_IMAGE_MODE = "extension"
+```
 
 ### 4. 启动本地桥接服务
 
@@ -242,6 +344,31 @@ npm run video -- "生成一个未来城市日出的短视频，电影感"
 $env:GEMINI_BRIDGE_CLI_WAIT="true"
 ```
 
+
+## 可视化面板
+
+项目内置本地面板，用来查看 Gemini 任务历史、预览输出文件、复制结果和删除历史记录。
+
+启动方式：
+
+```powershell
+npm run panel
+```
+
+或双击：
+
+```text
+open-panel.cmd
+```
+
+默认访问：
+
+```text
+http://127.0.0.1:9876/panel
+```
+
+注意：面板默认使用 9876 端口；Codex MCP 默认使用 8765 端口。两者可以同时存在，互不影响。
+
 ## 健康检查
 
 ```powershell
@@ -333,7 +460,7 @@ EADDRINUSE: address already in use 127.0.0.1:8765
 
 说明桥接服务已经在运行，或有旧进程占用端口。
 
-### 3. Gemini 页面打开但 Codex 说没连接
+### 3. 自动化浏览器没有登录或不能生图
 
 先检查：
 
@@ -341,7 +468,16 @@ EADDRINUSE: address already in use 127.0.0.1:8765
 Invoke-RestMethod http://127.0.0.1:8765/health
 ```
 
-重点看：
+如果 Gemini 返回“未登录”或“无法创建图片”，说明当前自动化浏览器 Profile 还没有完整登录，或该账号会话在这个窗口里没有对应能力。
+
+处理方式：
+
+1. 保持桥接服务运行。
+2. 重新提交一次 Gemini 任务，让自动化 Chrome 窗口打开。
+3. 在这个自动化窗口里登录 Gemini。
+4. 手动确认生图/视频能力可用后，再从 Codex 重试。
+
+旧扩展路径才需要关注：
 
 ```text
 geminiPagePollingActive: true
@@ -359,7 +495,8 @@ npm test
 
 当前技术栈：
 
-- Chrome Manifest V3 扩展
+- Playwright 浏览器自动化
+- Chrome Manifest V3 扩展兼容路径
 - Node.js 原生 HTTP Bridge
 - MCP Stdio Server
 - `@modelcontextprotocol/sdk`
@@ -370,6 +507,6 @@ npm test
 ## 说明
 
 - 这是对正常登录 Gemini 网页会话的自动化调用，只能使用你账号本来就能手动使用的能力。
-- 如果 Gemini 网页结构变化，可能需要更新 `extension/content-script.js` 中的选择器。
+- 如果 Gemini 网页结构变化，可能需要更新 `src/browser-agent.mjs` 中的选择器。
 - 代码结果会返回给 Codex 审阅并保存到本地，不会自动写入你的业务项目文件。
 - 图片和视频能否完整落盘，取决于 Gemini 页面当前是否暴露可读取的媒体地址或数据。

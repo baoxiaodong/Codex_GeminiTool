@@ -1,9 +1,9 @@
 ﻿import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { appendTaskIndex } from '../src/task-index.mjs';
+import { appendTaskIndex, readTaskIndex } from '../src/task-index.mjs';
 
 test('appends completed Gemini task summaries to output index', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'gemini-task-index-'));
@@ -32,6 +32,7 @@ test('appends completed Gemini task summaries to output index', async () => {
     assert.equal(entry.type, 'code');
     assert.equal(entry.status, 'completed');
     assert.equal(entry.prompt, 'write a RAG demo');
+    assert.equal(entry.text, 'done');
     assert.deepEqual(entry.files, ['code/task-000123.md']);
     assert.equal(index.tasks.length, 1);
     assert.deepEqual(index.tasks[0], entry);
@@ -72,6 +73,34 @@ test('keeps newest task index entries first', async () => {
       height: null,
       duration: null,
     }]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('recovers missing persisted artifact paths from output folders', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'gemini-task-index-recover-'));
+  try {
+    const imageDir = path.join(root, 'images');
+    await mkdir(imageDir, { recursive: true });
+    await writeFile(path.join(imageDir, 'task-000777-0.png'), 'png-data', 'utf8');
+    await writeFile(path.join(root, 'index.json'), JSON.stringify({
+      tasks: [{
+        taskId: 'task-000777',
+        type: 'image',
+        status: 'completed',
+        prompt: 'preview image',
+        createdAt: '2026-05-20T00:00:00.000Z',
+        updatedAt: '2026-05-20T00:00:01.000Z',
+        files: [],
+        media: [],
+        error: null,
+      }],
+    }, null, 2), 'utf8');
+
+    const index = await readTaskIndex(root);
+
+    assert.deepEqual(index.tasks[0].files, ['images/task-000777-0.png']);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

@@ -117,7 +117,7 @@ async function runGeminiTask(task) {
   const prompt = task.extensionPrompt || task.prompt;
   const beforeSignature = latestResponseSignature(task.type);
   const beforeMediaKeys = collectMediaKeys(document.body);
-  const submission = await submitPrompt(prompt);
+  const submission = await submitPrompt(prompt, task.type);
 
   window.__geminiWebBridge.currentTask = {
     id: task.id,
@@ -135,14 +135,39 @@ async function runGeminiTask(task) {
   };
 }
 
-async function submitPrompt(prompt) {
+async function submitPrompt(prompt, type = 'ask') {
   const input = await waitForElement(findPromptInput, 30000, 'Could not find Gemini prompt input');
   const inputInfo = describeInput(input);
   window.__geminiWebBridge.lastPromptTarget = inputInfo;
   window.__geminiWebBridge.lastPromptError = null;
   document.documentElement.setAttribute('data-gemini-web-bridge-target', JSON.stringify(inputInfo));
 
-  const submission = await submitPromptInPageWithDebugger(prompt);
+  const domSubmission = await submitPromptWithDom(prompt, input, type).catch(() => null);
+  let submission = domSubmission;
+
+  if ((type === 'image' || type === 'video') && !submission?.didSubmit) {
+    submission = {
+      didSubmit: true,
+      method: 'dom_forced_optimistic',
+      buttonInfo: domSubmission?.buttonInfo ?? null,
+      inserted: Boolean(domSubmission?.inserted),
+      fallbackError: 'Skipped debugger fallback for media task',
+    };
+  }
+
+  if (!submission?.didSubmit) {
+    submission = await submitPromptInPageWithDebugger(prompt).catch((error) => {
+      if (domSubmission?.inserted) {
+        return {
+          ...domSubmission,
+          didSubmit: true,
+          method: `${domSubmission.method || 'dom'}_optimistic_after_debugger_error`,
+          fallbackError: error.message,
+        };
+      }
+      throw error;
+    });
+  }
 
   return {
     scriptVersion: BRIDGE_SCRIPT_VERSION,
@@ -152,6 +177,54 @@ async function submitPrompt(prompt) {
     beforeIdle: true,
     didSubmit: Boolean(submission?.didSubmit),
     debuggerSubmission: submission,
+  };
+}
+
+async function submitPromptWithDom(prompt, input, type = 'ask') {
+  await setPromptText(input, prompt, type);
+  await sleep(300);
+
+  const button = findSendButton(input);
+  if (button) {
+    performTrustedClick(button);
+    await sleep(1000);
+    if (!composerStillLooksIdle(input) || generationStillRunning()) {
+      return {
+        didSubmit: true,
+        method: 'dom_click',
+        buttonInfo: describeButton(button),
+        inserted: true,
+      };
+    }
+  }
+
+  dispatchEnterSubmission(input);
+  await sleep(1000);
+  if (!composerStillLooksIdle(input) || generationStillRunning()) {
+    return {
+      didSubmit: true,
+      method: 'dom_enter',
+      buttonInfo: button ? describeButton(button) : null,
+      inserted: true,
+    };
+  }
+
+  dispatchCtrlEnterSubmission(input);
+  await sleep(1000);
+  if (!composerStillLooksIdle(input) || generationStillRunning()) {
+    return {
+      didSubmit: true,
+      method: 'dom_ctrl_enter',
+      buttonInfo: button ? describeButton(button) : null,
+      inserted: true,
+    };
+  }
+
+  return {
+    didSubmit: type === 'image' || type === 'video',
+    method: 'dom_unconfirmed',
+    buttonInfo: button ? describeButton(button) : null,
+    inserted: true,
   };
 }
 
@@ -168,7 +241,7 @@ async function submitPromptInPageWithDebugger(prompt) {
   return response.result;
 }
 
-async function setPromptText(input, prompt) {
+async function setPromptText(input, prompt, type = 'ask') {
   if ('value' in input && input.tagName === 'TEXTAREA') {
     input.value = prompt;
     input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: prompt }));
@@ -181,7 +254,7 @@ async function setPromptText(input, prompt) {
       dispatchRichInputEvents(input, prompt);
       return;
     }
-    if (await tryInsertTextWithDebugger(input, prompt)) {
+    if (type !== 'image' && type !== 'video' && await tryInsertTextWithDebugger(input, prompt)) {
       dispatchRichInputEvents(input, prompt);
       return;
     }
@@ -710,7 +783,8 @@ function replaceContentEditableText(input, prompt) {
   if (!selectEditableContents(input)) {
     window.__geminiWebBridge.lastPromptError = 'window.getSelection() is unavailable';
     document.documentElement.setAttribute('data-gemini-web-bridge-error', 'window.getSelection() is unavailable');
-    throw new Error('window.getSelection() is unavailable');
+    replaceDomText(input, prompt);
+    return;
   }
 
   const selected = document.execCommand('selectAll', false);
@@ -809,7 +883,10 @@ function composerStillLooksIdle(input) {
   if (!button) return true;
 
   const label = `${button.getAttribute('aria-label') ?? ''} ${button.textContent ?? ''}`.toLowerCase();
-  const looksLikeStop = label.includes('stop') || label.includes('cancel');
+  const looksLikeStop = label.includes('stop')
+    || label.includes('cancel')
+    || label.includes('停止')
+    || label.includes('取消');
   return !looksLikeStop;
 }
 

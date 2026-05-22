@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import * as z from 'zod/v4';
-import { dataUrlToImageContent, formatToolPayload } from './mcp-format.mjs';
+import { dataUrlToImageContent, filesToContentBlocks, formatToolPayload } from './mcp-format.mjs';
 import { withWaitOptions } from './mcp-options.mjs';
 import { endpointForRunType, runBodyForType, runWaitMsForType } from './mcp-run.mjs';
 
@@ -224,12 +224,14 @@ async function bridgeJson(path, options = {}) {
   return payload;
 }
 
-function textResult(payload) {
+async function textResult(payload) {
   const formatted = formatToolPayload(payload);
   const media = Array.isArray(formatted.structured.media) ? formatted.structured.media : [];
+  const files = Array.isArray(formatted.structured.files) ? formatted.structured.files : [];
   const imageContent = media
     .map((item) => dataUrlToImageContent(item?.dataUrl))
     .filter(Boolean);
+  const fileContent = await filesToContentBlocks(files);
 
   return {
     structuredContent: formatted.structured,
@@ -239,6 +241,7 @@ function textResult(payload) {
         text: formatted.text,
       },
       ...imageContent,
+      ...fileContent,
     ],
   };
 }

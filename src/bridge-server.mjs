@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
 import { WebSocket, WebSocketServer } from 'ws';
@@ -8,7 +8,9 @@ import { endpointType, normalizeTaskRequest, toExtensionPrompt } from './protoco
 import { createTaskStore } from './task-store.mjs';
 import { httpError, readJsonBody, requireToken, sendError, sendJson } from './http-utils.mjs';
 import { saveCodeResultFiles } from './result-files.mjs';
-import { appendTaskIndex } from './task-index.mjs';
+import { appendTaskIndex, deleteTaskIndexEntry, readTaskIndex } from './task-index.mjs';
+import { executionModeForType } from './execution-mode.mjs';
+import { executeBrowserTask } from './browser-agent.mjs';
 
 const HOST = process.env.GEMINI_BRIDGE_HOST ?? '127.0.0.1';
 const PORT = Number(process.env.GEMINI_BRIDGE_PORT ?? 8765);
@@ -19,8 +21,9 @@ const STALE_TASK_MS = Number(process.env.GEMINI_BRIDGE_STALE_TASK_MS ?? 45000);
 const WAIT_ACK_DEFAULT_MS = Number(process.env.GEMINI_BRIDGE_WAIT_ACK_MS ?? 5000);
 const WAIT_ACK_MAX_MS = Number(process.env.GEMINI_BRIDGE_WAIT_ACK_MAX_MS ?? 60000);
 const WARNING_NO_ACTIVE_EXTENSION = `No active Gemini page is polling with script ${EXPECTED_SCRIPT_VERSION}. Reload the unpacked extension and refresh Gemini.`;
+const PANEL_HTML_PATH = path.resolve('panel/index.html');
 
-const store = createTaskStore();
+const store = createTaskStore({ initialSequence: await readTaskIndexSequence(OUTPUT_ROOT) });
 const extensionClients = new Set();
 let lastGeminiPagePollAt = null;
 let lastGeminiScriptVersion = null;
@@ -45,6 +48,12 @@ const server = http.createServer(async (request, response) => {
         ok: true,
         bridge: 'gemini-web-bridge',
         outputRoot: OUTPUT_ROOT,
+        executionModes: {
+          ask: executionModeForType('ask'),
+          code: executionModeForType('code'),
+          image: executionModeForType('image'),
+          video: executionModeForType('video'),
+        },
         extensionClients: extensionClients.size,
         polling: true,
         expectedGeminiScriptVersion: EXPECTED_SCRIPT_VERSION,
@@ -66,6 +75,37 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === 'GET' && url.pathname === '/history') {
+      const history = await readTaskIndex(OUTPUT_ROOT);
+      sendJson(response, 200, history);
+      return;
+    }
+
+    const historyDeleteMatch = url.pathname.match(/^\/history\/([^/]+)$/);
+    if (request.method === 'DELETE' && historyDeleteMatch) {
+      const taskId = decodeURIComponent(historyDeleteMatch[1]);
+      const result = await deleteTaskIndexEntry(OUTPUT_ROOT, taskId);
+      store.deleteTask?.(taskId);
+      sendJson(response, 200, result);
+      return;
+    }
+
+    if (request.method === 'GET' && (url.pathname === '/panel' || url.pathname === '/panel/')) {
+      const html = await readFile(PANEL_HTML_PATH, 'utf8');
+      sendHtml(response, 200, html);
+      return;
+    }
+
+    if (request.method === 'GET' && url.pathname.startsWith('/artifact/')) {
+      const relativePath = decodeURIComponent(url.pathname.slice('/artifact/'.length));
+      const assetPath = resolveOutputPath(OUTPUT_ROOT, relativePath);
+      const fileStat = await stat(assetPath);
+      if (!fileStat.isFile()) throw httpError(404, `Artifact not found: ${relativePath}`);
+      const body = await readFile(assetPath);
+      sendBinary(response, 200, body, contentTypeForPath(assetPath));
+      return;
+    }
+
     requireToken(request, TOKEN);
 
     if (request.method === 'POST' && url.pathname === '/tasks') {
@@ -78,6 +118,25 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'POST' && /^\/(ask|code|image|video)$/.test(url.pathname)) {
       const body = await readJsonBody(request);
       const type = endpointType(url.pathname.slice(1));
+      const executionMode = executionModeForType(type);
+
+      if (executionMode === 'browser') {
+        const requestTask = normalizeTaskRequest({ ...body, type });
+        const task = store.createTask(requestTask);
+        store.startTask(task.id);
+
+        runBrowserTaskInBackground(task.id, type).catch(() => {});
+
+        if (body.wait === true) {
+          const timeoutMs = Number(body.waitMs) > 0 ? Number(body.waitMs) : defaultWaitMs(type);
+          const terminal = await store.waitForTerminal(task.id, timeoutMs);
+          sendJson(response, terminal.status === 'completed' ? 200 : 502, terminal);
+        } else {
+          sendJson(response, 202, task);
+        }
+        return;
+      }
+
       const task = createAndBroadcastTask({ ...body, type });
 
       if (body.wait === true) {
@@ -255,6 +314,16 @@ function createAndBroadcastTask(body) {
   return task;
 }
 
+async function readTaskIndexSequence(root) {
+  const index = await readTaskIndex(root);
+  const tasks = Array.isArray(index.tasks) ? index.tasks : [];
+  return tasks.reduce((max, task) => {
+    const match = String(task?.taskId ?? '').match(/^task-(\d+)$/);
+    if (!match) return max;
+    return Math.max(max, Number(match[1]));
+  }, 0);
+}
+
 function withActiveExtensionWarning(task) {
   if (task.status !== 'queued' || isGeminiPagePollingActive()) {
     return task;
@@ -294,6 +363,21 @@ async function completeFromPayload(taskId, payload) {
   return completed;
 }
 
+async function runBrowserTaskInBackground(taskId, taskType) {
+  const task = store.getTask(taskId);
+  if (!task) throw httpError(404, `Unknown task id: ${taskId}`);
+
+  try {
+    const browserResult = await executeBrowserTask(task);
+    const result = await normalizeResultPayload(taskId, browserResult, taskType);
+    const completed = store.completeTask(taskId, result);
+    await appendTaskIndex(OUTPUT_ROOT, completed);
+    return completed;
+  } catch (error) {
+    return store.failTask(taskId, error);
+  }
+}
+
 async function normalizeResultPayload(taskId, payload, taskType = '') {
   const result = {
     text: typeof payload.text === 'string' ? payload.text : '',
@@ -307,6 +391,12 @@ async function normalizeResultPayload(taskId, payload, taskType = '') {
     if (typeof item?.dataUrl === 'string') {
       const file = await saveDataUrl(taskId, item);
       result.files.push(file);
+      continue;
+    }
+
+    if (typeof item?.url === 'string' && /^https?:\/\//i.test(item.url)) {
+      const file = await saveRemoteMediaFile(taskId, item);
+      if (file) result.files.push(file);
     }
   }
 
@@ -340,19 +430,102 @@ async function saveDataUrl(taskId, item) {
   };
 }
 
-function extensionForMime(mimeType) {
+async function saveRemoteMediaFile(taskId, item) {
+  const response = await fetch(item.url);
+  if (!response.ok) {
+    throw httpError(502, `Failed to download remote media: ${response.status} ${response.statusText}`);
+  }
+
+  const contentType = response.headers.get('content-type');
+  const buffer = Buffer.from(await response.arrayBuffer());
+  if (isHtmlLikeRemoteMedia(contentType, buffer)) {
+    throw httpError(502, `remote media resolved to HTML instead of ${item.kind ?? 'media'}: ${item.url}`);
+  }
+
+  const mimeType = normalizeRemoteMimeType(contentType, item.kind);
+  const extension = extensionForMime(mimeType, item.url);
+  const relativePath = path.join(item.kind === 'video' ? 'videos' : 'images', `${taskId}-${item.index ?? 0}.${extension}`);
+  const outputPath = resolveOutputPath(OUTPUT_ROOT, relativePath);
+
+  await mkdir(path.dirname(outputPath), { recursive: true });
+  await writeFile(outputPath, buffer);
+
+  return {
+    kind: item.kind ?? 'media',
+    mimeType,
+    path: outputPath,
+  };
+}
+
+function isHtmlLikeRemoteMedia(contentType, buffer) {
+  const mimeType = String(contentType || '').split(';')[0].trim().toLowerCase();
+  if (mimeType === 'text/html' || mimeType === 'application/xhtml+xml') return true;
+
+  const prefix = Buffer.isBuffer(buffer)
+    ? buffer.subarray(0, 512).toString('utf8')
+    : String(buffer || '').slice(0, 512);
+  const normalizedPrefix = prefix.replace(/^\uFEFF/, '').trimStart().toLowerCase();
+  return normalizedPrefix.startsWith('<!doctype html')
+    || normalizedPrefix.startsWith('<html')
+    || normalizedPrefix.startsWith('<head')
+    || normalizedPrefix.startsWith('<body');
+}
+
+function extensionForMime(mimeType, mediaUrl = '') {
   if (mimeType === 'image/png') return 'png';
   if (mimeType === 'image/jpeg') return 'jpg';
   if (mimeType === 'image/webp') return 'webp';
   if (mimeType === 'video/mp4') return 'mp4';
   if (mimeType === 'video/webm') return 'webm';
+  const match = String(mediaUrl || '').match(/\.([a-z0-9]{2,5})(?:$|[?#])/i);
+  if (match) return match[1].toLowerCase();
   return 'bin';
+}
+
+function normalizeRemoteMimeType(contentType, kind = 'media') {
+  const raw = String(contentType || '').split(';')[0].trim().toLowerCase();
+  if (raw) return raw;
+  return kind === 'video' ? 'video/mp4' : 'image/png';
 }
 
 function defaultWaitMs(type) {
   if (type === 'video') return 30 * 60 * 1000;
   if (type === 'image') return 10 * 60 * 1000;
   return 2 * 60 * 1000;
+}
+
+function sendHtml(response, statusCode, body) {
+  response.writeHead(statusCode, {
+    'content-type': 'text/html; charset=utf-8',
+    'cache-control': 'no-store',
+    'access-control-allow-origin': '*',
+  });
+  response.end(body);
+}
+
+function sendBinary(response, statusCode, body, contentType) {
+  response.writeHead(statusCode, {
+    'content-type': contentType,
+    'cache-control': 'no-store',
+    'access-control-allow-origin': '*',
+  });
+  response.end(body);
+}
+
+function contentTypeForPath(filePath) {
+  const lower = filePath.toLowerCase();
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  if (lower.endsWith('.gif')) return 'image/gif';
+  if (lower.endsWith('.html')) return 'text/html; charset=utf-8';
+  if (lower.endsWith('.js')) return 'text/javascript; charset=utf-8';
+  if (lower.endsWith('.json')) return 'application/json; charset=utf-8';
+  if (lower.endsWith('.md')) return 'text/markdown; charset=utf-8';
+  if (lower.endsWith('.py')) return 'text/x-python; charset=utf-8';
+  if (lower.endsWith('.mp4')) return 'video/mp4';
+  if (lower.endsWith('.webm')) return 'video/webm';
+  return 'application/octet-stream';
 }
 
 function recordGeminiPagePoll(payload = {}) {
